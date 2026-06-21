@@ -2936,7 +2936,7 @@ function resolveTreeContextTarget(e) {
         };
     }
 
-    if (e.target.closest('#sidebarNotesPanelBody .notes-panel-empty') && state.selectedSection) {
+    if (e.target.closest('#sidebarNotesPanelBody') && state.selectedSection) {
         return { type: 'section-empty', id: state.selectedSection.sectionId };
     }
 
@@ -2996,7 +2996,7 @@ function resolveTreeContextTarget(e) {
         return { type: 'root' };
     }
 
-    if (e.target.closest('#treeView') || e.target.closest('.tree-scroll-area') || e.target.closest('#sidebarNotesPanelBody')) {
+    if (e.target.closest('#treeView') || e.target.closest('.tree-scroll-area')) {
         return { type: 'root' };
     }
 
