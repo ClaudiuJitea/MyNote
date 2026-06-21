@@ -201,6 +201,10 @@
                                         <i class="fa-regular fa-star"></i>
                                         <span class="editor-action-label">Star</span>
                                     </button>
+                                    <button type="button" id="editorDrawBtn" class="editor-action-btn" aria-label="Draw sketch" title="Draw sketch — Ctrl+Shift+D">
+                                        <i class="fa-solid fa-pencil"></i>
+                                        <span class="editor-action-label">Draw</span>
+                                    </button>
                                     <button type="button" id="editorAiBtn" class="editor-action-btn editor-action-btn-ai" aria-label="AI commands" title="AI commands — Ctrl+Shift+A">
                                         <i class="fa-solid fa-wand-magic-sparkles"></i>
                                         <span class="editor-action-label">AI</span>
@@ -673,6 +677,74 @@
         </div>
     </div>
 
+    <div id="sketchOverlay" class="sketch-overlay hidden" aria-hidden="true">
+        <div class="sketch-dialog" role="dialog" aria-modal="true" aria-labelledby="sketchHeading">
+            <div class="sketch-header">
+                <h2 id="sketchHeading" class="sketch-title">Draw sketch</h2>
+                <button type="button" id="sketchCloseBtn" class="sketch-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="sketch-toolbar" aria-label="Drawing tools">
+                <div class="sketch-toolbar-row sketch-toolbar-row-tools">
+                    <div class="sketch-tool-group" role="group" aria-label="Drawing tools">
+                        <button type="button" class="sketch-tool-btn is-active" data-sketch-tool="pen" aria-label="Pen" title="Pen"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="highlighter" aria-label="Highlighter" title="Highlighter"><i class="fa-solid fa-highlighter"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="line" aria-label="Line" title="Line"><i class="fa-solid fa-minus"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="arrow" aria-label="Arrow" title="Arrow"><i class="fa-solid fa-arrow-right-long"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="rect" aria-label="Rectangle" title="Rectangle"><i class="fa-regular fa-square"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="fillRect" aria-label="Filled rectangle" title="Filled rectangle"><i class="fa-solid fa-square"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="ellipse" aria-label="Ellipse" title="Ellipse"><i class="fa-regular fa-circle"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="text" aria-label="Text" title="Text"><i class="fa-solid fa-font"></i></button>
+                        <button type="button" class="sketch-tool-btn" data-sketch-tool="eraser" aria-label="Eraser" title="Eraser"><i class="fa-solid fa-eraser"></i></button>
+                    </div>
+                    <div class="sketch-size-carousel" role="group" aria-labelledby="sketchSizeLabel">
+                        <span class="sketch-toolbar-label" id="sketchSizeLabel">Brush</span>
+                        <button type="button" id="sketchSizePrev" class="sketch-carousel-btn" aria-label="Decrease size"><i class="fa-solid fa-chevron-left"></i></button>
+                        <output id="sketchSizeValue" class="sketch-size-value" for="sketchSizePrev sketchSizeNext">4</output>
+                        <button type="button" id="sketchSizeNext" class="sketch-carousel-btn" aria-label="Increase size"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="sketch-toolbar-row sketch-toolbar-row-colors">
+                    <span class="sketch-toolbar-label">Color</span>
+                    <div class="sketch-color-panel" aria-label="Colors">
+                        <div id="sketchColorGrid" class="sketch-color-grid" role="group" aria-label="Color palette"></div>
+                        <label class="sketch-color-custom" title="Pick any color">
+                            <input type="color" id="sketchColorPicker" value="#1c1917" aria-label="Custom color">
+                            <span class="sketch-color-custom-label"><i class="fa-solid fa-eyedropper" aria-hidden="true"></i></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="sketch-toolbar-row sketch-toolbar-row-controls">
+                    <div class="sketch-toolbar-actions">
+                        <button type="button" id="sketchUndoBtn" class="sketch-tool-btn" aria-label="Undo stroke" title="Undo stroke" disabled><i class="fa-solid fa-rotate-left"></i></button>
+                        <button type="button" id="sketchClearBtn" class="sketch-tool-btn" aria-label="Clear canvas" title="Clear canvas"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="sketch-body">
+                <div class="sketch-canvas-wrap">
+                    <div class="sketch-canvas-frame">
+                        <canvas id="sketchCanvas" tabindex="0" aria-label="Drawing canvas"></canvas>
+                        <div id="sketchResizeHandle" class="sketch-resize-handle" role="separator" aria-label="Resize canvas" title="Drag to resize canvas">
+                            <i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+                <input type="text" id="sketchTextInput" class="sketch-text-input hidden" maxlength="500" autocomplete="off" spellcheck="false" aria-label="Type sketch text">
+                <p id="sketchCanvasSizeLabel" class="sketch-canvas-size-label">320 × 240</p>
+            </div>
+            <div class="sketch-actions">
+                <label class="sketch-crop-toggle">
+                    <input type="checkbox" id="sketchCropToggle" checked>
+                    <span>Crop to drawing</span>
+                </label>
+                <div class="sketch-action-buttons">
+                    <button type="button" id="sketchCancelBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="sketchInsertBtn" class="btn btn-primary">Insert into note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="aiSelectionBar" class="ai-selection-bar hidden" role="toolbar" aria-label="AI quick actions">
         <button type="button" class="ai-selection-btn" data-action="improve" title="Improve writing"><i class="fa-solid fa-pen-fancy"></i><span>Improve</span></button>
         <button type="button" class="ai-selection-btn" data-action="summarize" title="Summarize"><i class="fa-solid fa-compress"></i><span>Summarize</span></button>
@@ -685,6 +757,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
-    <script src="app.js?v=40"></script>
+    <script src="app.js?v=49"></script>
 </body>
 </html>

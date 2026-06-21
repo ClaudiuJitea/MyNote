@@ -1,6 +1,6 @@
 # MyNote
 
-Self-hosted note-taking web app with a folder-style hierarchy, rich text editing, search, image uploads, optional AI assistance, and multi-user support. Runs on shared hosting (cPanel) or locally with PHP and MySQL.
+Self-hosted note-taking web app with a folder-style hierarchy, rich text editing, sketch drawing, search, image uploads, optional AI assistance, and multi-user support. Runs on shared hosting (cPanel) or locally with PHP and MySQL.
 
 The UI is branded **MyNotes**; the repository and deployment docs use **MyNote**.
 
@@ -16,7 +16,7 @@ Welcome screen with recently opened notes, starred notes, and a quick way to cre
 
 ### Editor
 
-Rich text editing with breadcrumb navigation, table of contents, focus mode, and a **Star** button in the toolbar (next to AI) to add or remove notes from Starred.
+Rich text editing with breadcrumb navigation, table of contents, focus mode, a **Draw** button for sketches, and a **Star** button in the toolbar (next to AI) to add or remove notes from Starred.
 
 ![MyNotes note editor with Starred button in the toolbar](img/main.png)
 
@@ -51,6 +51,7 @@ User management, system-wide backup, and admin AI configuration.
 - **Hierarchy** — Organize notes in notebooks, sections, and pages with drag-and-drop reordering
 - **Home dashboard** — Recently opened notes, starred notes, and one-click create when no note is open
 - **Rich text editor** — Write and format notes with [Quill](https://quilljs.com/)
+- **Sketch drawing** — Draw directly in notes from the editor toolbar (**Draw** or `Ctrl+Shift+D`): pen, highlighter, lines, arrows, shapes, text, and eraser; numeric brush/text size; 18-color palette plus custom color picker; resizable canvas; optional crop-to-drawing on insert (PNG uploaded like pasted images)
 - **Search** — Full-text search across all of your notes
 - **Images** — Upload images to notes; OCR text is stored for search
 - **Starred notes** — Star a note from the editor toolbar (next to AI) or from the sidebar; starred notes appear in a dedicated sidebar section and on Home
@@ -173,6 +174,22 @@ MyNote/
 AI features are optional. Each user adds their own OpenRouter API key in **Account settings**. Keys are encrypted on the server and are never returned to the browser after saving. Without a key, the rest of the app works normally.
 
 Default model: `google/gemma-4-26b-a4b-it` (configurable per user).
+
+## Sketch drawing
+
+Open the sketch modal from the editor toolbar (**Draw** or `Ctrl+Shift+D`) while editing a note.
+
+| Tool | Description |
+|------|-------------|
+| Pen / Highlighter | Freehand drawing |
+| Line / Arrow | Straight lines and arrows |
+| Rectangle / Filled rectangle / Ellipse | Shape outlines and fills |
+| Text | Click the canvas, type inline, press Enter to place |
+| Eraser | Remove strokes |
+
+**Brush** and **Text** size use a numeric carousel (`◀` / `▶`). Choose from preset swatches or the eyedropper for any color. Drag the canvas corner handle to resize the drawing area (within the modal). Enable **Crop to drawing** to insert only the drawn region (plus a small margin) instead of the full canvas.
+
+Sketches are exported as PNG and embedded in the note at the cursor. Stroke data is kept in memory during editing for undo; a separate sketch note type with JSON persistence is planned for a later release.
 
 ## Backup and restore
 

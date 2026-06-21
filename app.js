@@ -94,6 +94,7 @@ const editorUndoBtn = document.getElementById('editorUndoBtn');
 const editorRedoBtn = document.getElementById('editorRedoBtn');
 const editorTocBtn = document.getElementById('editorTocBtn');
 const editorFocusBtn = document.getElementById('editorFocusBtn');
+const editorDrawBtn = document.getElementById('editorDrawBtn');
 const editorAiBtn = document.getElementById('editorAiBtn');
 const editorToc = document.getElementById('editorToc');
 const editorTocList = document.getElementById('editorTocList');
@@ -291,6 +292,52 @@ const aiPaletteResultTitle = document.getElementById('aiPaletteResultTitle');
 const aiPaletteResultText = document.getElementById('aiPaletteResultText');
 const aiSelectionBar = document.getElementById('aiSelectionBar');
 
+const sketchOverlay = document.getElementById('sketchOverlay');
+const sketchCanvas = document.getElementById('sketchCanvas');
+const sketchResizeHandle = document.getElementById('sketchResizeHandle');
+const sketchCloseBtn = document.getElementById('sketchCloseBtn');
+const sketchUndoBtn = document.getElementById('sketchUndoBtn');
+const sketchClearBtn = document.getElementById('sketchClearBtn');
+const sketchCancelBtn = document.getElementById('sketchCancelBtn');
+const sketchInsertBtn = document.getElementById('sketchInsertBtn');
+const sketchCanvasSizeLabel = document.getElementById('sketchCanvasSizeLabel');
+const sketchCropToggle = document.getElementById('sketchCropToggle');
+const sketchColorGrid = document.getElementById('sketchColorGrid');
+const sketchColorPicker = document.getElementById('sketchColorPicker');
+const sketchSizeLabel = document.getElementById('sketchSizeLabel');
+const sketchSizeValue = document.getElementById('sketchSizeValue');
+const sketchSizePrev = document.getElementById('sketchSizePrev');
+const sketchSizeNext = document.getElementById('sketchSizeNext');
+const sketchTextInput = document.getElementById('sketchTextInput');
+
+const SKETCH_CANVAS_MIN = { width: 200, height: 150 };
+const SKETCH_CANVAS_MAX = { width: 1600, height: 1200 };
+const SKETCH_SHAPE_TOOLS = new Set(['line', 'arrow', 'rect', 'fillRect', 'ellipse']);
+const SKETCH_BRUSH_SIZES = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24];
+const SKETCH_TEXT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 32, 40, 48];
+const SKETCH_PALETTE = [
+    '#1c1917', '#ffffff', '#9ca3af', '#dc2626', '#ea580c', '#eab308',
+    '#16a34a', '#059669', '#2563eb', '#4338ca', '#7c3aed', '#db2777',
+    '#0891b2', '#0d9488', '#92400e', '#64748b', '#000000', '#f472b6'
+];
+
+const sketchSession = {
+    strokes: [],
+    undone: [],
+    currentStroke: null,
+    tool: 'pen',
+    color: '#1c1917',
+    sizeIndex: 3,
+    canvasWidth: 640,
+    canvasHeight: 400,
+    isDrawing: false,
+    isResizing: false,
+    dpr: 1
+};
+
+let sketchResizeState = null;
+let sketchTextEdit = null;
+
 let aiPaletteHighlight = 0;
 let aiPaletteFilteredItems = [];
 let aiPaletteForm = {
@@ -420,6 +467,10 @@ function showModal({ type, title, message, placeholder, defaultValue, confirmTex
         }
 
         modalOverlay.classList.remove('hidden');
+        modalOverlay.classList.toggle(
+            'modal-above-sketch',
+            !!(sketchOverlay && !sketchOverlay.classList.contains('hidden'))
+        );
         requestAnimationFrame(() => {
             if (type === 'prompt') modalInput.focus();
             else modalConfirmBtn.focus();
@@ -429,6 +480,7 @@ function showModal({ type, title, message, placeholder, defaultValue, confirmTex
 
 function closeModal(result) {
     modalOverlay.classList.add('hidden');
+    modalOverlay.classList.remove('modal-above-sketch');
     resetModalFields();
     if (modalResolve) {
         modalResolve(result);
@@ -1904,6 +1956,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEditorFavorite();
     initAiSettings();
     initAiPalette();
+    initSketchModal();
     initBackupControls();
     initAdminUserManagement();
     fetchCsrfToken().finally(() => checkAuth());
@@ -3608,6 +3661,10 @@ function initEditorShortcuts() {
             e.preventDefault();
             openAiAssistModal();
         }
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd' && isEditorShortcutTarget(e.target)) {
+            e.preventDefault();
+            openSketchModal();
+        }
         if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && isEditorShortcutTarget(e.target)) {
             e.preventDefault();
             quill?.history?.undo();
@@ -3643,6 +3700,9 @@ function initEditorEnhancements() {
     });
     editorFocusBtn?.addEventListener('click', () => {
         setEditorFocusMode(!dashboardLayout?.classList.contains('editor-focus-mode'));
+    });
+    editorDrawBtn?.addEventListener('click', () => {
+        openSketchModal();
     });
     editorAiBtn?.addEventListener('click', () => {
         openAiAssistModal();
@@ -4508,6 +4568,23 @@ async function savePage() {
     }
 }
 
+// Image upload (shared by paste and sketch)
+async function uploadPageImage(imageFile, { ocr = true } = {}) {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    if (state.activePage) formData.append('page_id', state.activePage.id);
+
+    if (ocr) {
+        setSaveStatus('uploading', 'Extracting text…');
+        const ocrResult = await Tesseract.recognize(imageFile, 'eng');
+        formData.append('ocr_text', ocrResult.data.text);
+    }
+
+    setSaveStatus('uploading', 'Uploading…');
+    const res = await apiFetch('api/upload.php', { method: 'POST', body: formData });
+    return res.json();
+}
+
 // Image Paste & OCR
 async function handlePaste(e) {
     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -4525,18 +4602,8 @@ async function handlePaste(e) {
         e.preventDefault();
         setSaveStatus('uploading', 'Uploading…');
 
-        const formData = new FormData();
-        formData.append('image', imageFile);
-        if (state.activePage) formData.append('page_id', state.activePage.id);
-
         try {
-            setSaveStatus('uploading', 'Extracting text…');
-            const ocrResult = await Tesseract.recognize(imageFile, 'eng');
-            const extractedText = ocrResult.data.text;
-            formData.append('ocr_text', extractedText);
-
-            const res = await apiFetch('api/upload.php', { method: 'POST', body: formData });
-            const data = await res.json();
+            const data = await uploadPageImage(imageFile, { ocr: true });
 
             if (data.success) {
                 const range = quill.getSelection(true);
@@ -4552,6 +4619,846 @@ async function handlePaste(e) {
             setSaveStatus('error', 'Upload failed');
         }
     }
+}
+
+// Sketch drawing modal
+function resetSketchSession() {
+    sketchSession.strokes = [];
+    sketchSession.undone = [];
+    sketchSession.currentStroke = null;
+    sketchSession.tool = 'pen';
+    sketchSession.color = '#1c1917';
+    sketchSession.sizeIndex = 3;
+    sketchSession.canvasWidth = 640;
+    sketchSession.canvasHeight = 400;
+    sketchSession.isDrawing = false;
+    sketchSession.isResizing = false;
+    sketchResizeState = null;
+    if (sketchCropToggle) sketchCropToggle.checked = true;
+    updateSketchToolbarUi();
+}
+
+function sketchSerialize() {
+    return JSON.stringify(sketchSession.strokes);
+}
+
+function sketchDeserialize(json) {
+    try {
+        const strokes = typeof json === 'string' ? JSON.parse(json) : json;
+        sketchSession.strokes = Array.isArray(strokes) ? strokes : [];
+        sketchSession.undone = [];
+        sketchSession.currentStroke = null;
+        redrawSketchCanvas();
+        updateSketchToolbarUi();
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function getSketchCanvasPoint(e) {
+    const rect = sketchCanvas.getBoundingClientRect();
+    const scaleX = sketchCanvas.width / rect.width;
+    const scaleY = sketchCanvas.height / rect.height;
+    return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+    };
+}
+
+function getSketchSizeOptions() {
+    return sketchSession.tool === 'text' ? SKETCH_TEXT_SIZES : SKETCH_BRUSH_SIZES;
+}
+
+function getSketchSizeValue() {
+    const options = getSketchSizeOptions();
+    const index = Math.max(0, Math.min(options.length - 1, sketchSession.sizeIndex));
+    return options[index];
+}
+
+function getSketchStrokeWidth(logicalWidth) {
+    return logicalWidth * sketchSession.dpr;
+}
+
+function normalizeSketchColor(color) {
+    if (!color) return '#1c1917';
+    const hex = color.trim().toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(hex)) return hex;
+    if (/^#[0-9a-f]{3}$/.test(hex)) {
+        return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+    }
+    return '#1c1917';
+}
+
+function isSketchShapeTool(tool) {
+    return SKETCH_SHAPE_TOOLS.has(tool);
+}
+
+function measureSketchTextStroke(stroke) {
+    if (!sketchCanvas || stroke.tool !== 'text' || !stroke.text) {
+        return { width: 0, height: 0 };
+    }
+    const ctx = sketchCanvas.getContext('2d');
+    const fontSize = stroke.fontSize || getSketchStrokeWidth(getSketchSizeValue());
+    ctx.save();
+    ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+    const metrics = ctx.measureText(stroke.text);
+    ctx.restore();
+    return {
+        width: metrics.width,
+        height: fontSize * 1.2
+    };
+}
+
+function clampSketchCanvasDimension(value, min, max) {
+    return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function updateSketchCanvasSizeLabel() {
+    if (sketchCanvasSizeLabel) {
+        sketchCanvasSizeLabel.textContent = `${sketchSession.canvasWidth} × ${sketchSession.canvasHeight}`;
+    }
+}
+
+function getSketchShapeRect(points) {
+    if (!points || points.length < 2) return null;
+    const [p0, p1] = points;
+    const x = Math.min(p0.x, p1.x);
+    const y = Math.min(p0.y, p1.y);
+    const w = Math.abs(p1.x - p0.x);
+    const h = Math.abs(p1.y - p0.y);
+    return { x, y, w, h };
+}
+
+function drawSketchArrowHead(ctx, x0, y0, x1, y1, width) {
+    const angle = Math.atan2(y1 - y0, x1 - x0);
+    const headLen = Math.max(width * 3, 10 * sketchSession.dpr);
+    const headAngle = Math.PI / 7;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(
+        x1 - headLen * Math.cos(angle - headAngle),
+        y1 - headLen * Math.sin(angle - headAngle)
+    );
+    ctx.lineTo(
+        x1 - headLen * Math.cos(angle + headAngle),
+        y1 - headLen * Math.sin(angle + headAngle)
+    );
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawSketchStroke(ctx, stroke) {
+    if (!stroke.points.length) return;
+
+    const isEraser = stroke.tool === 'eraser';
+    const isHighlighter = stroke.tool === 'highlighter';
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (isEraser) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+        ctx.fillStyle = 'rgba(0,0,0,1)';
+    } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = stroke.color;
+        ctx.fillStyle = stroke.color;
+        if (isHighlighter) {
+            ctx.globalAlpha = 0.35;
+        }
+    }
+
+    ctx.lineWidth = isHighlighter ? stroke.width * 2.5 : stroke.width;
+
+    if (stroke.tool === 'text' && stroke.text && stroke.points.length) {
+        const fontSize = stroke.fontSize || stroke.width || getSketchStrokeWidth(16);
+        ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(stroke.text, stroke.points[0].x, stroke.points[0].y);
+        ctx.restore();
+        return;
+    }
+
+    if (isSketchShapeTool(stroke.tool) && stroke.points.length >= 2) {
+        const [p0, p1] = stroke.points;
+        const rect = getSketchShapeRect(stroke.points);
+
+        switch (stroke.tool) {
+            case 'line':
+                ctx.beginPath();
+                ctx.moveTo(p0.x, p0.y);
+                ctx.lineTo(p1.x, p1.y);
+                ctx.stroke();
+                break;
+            case 'arrow':
+                ctx.beginPath();
+                ctx.moveTo(p0.x, p0.y);
+                ctx.lineTo(p1.x, p1.y);
+                ctx.stroke();
+                if (!isEraser) {
+                    drawSketchArrowHead(ctx, p0.x, p0.y, p1.x, p1.y, stroke.width);
+                }
+                break;
+            case 'rect':
+                if (rect.w > 0 && rect.h > 0) {
+                    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+                }
+                break;
+            case 'fillRect':
+                if (rect.w > 0 && rect.h > 0) {
+                    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+                }
+                break;
+            case 'ellipse':
+                if (rect.w > 0 && rect.h > 0) {
+                    ctx.beginPath();
+                    ctx.ellipse(
+                        rect.x + rect.w / 2,
+                        rect.y + rect.h / 2,
+                        rect.w / 2,
+                        rect.h / 2,
+                        0,
+                        0,
+                        Math.PI * 2
+                    );
+                    ctx.stroke();
+                }
+                break;
+            default:
+                break;
+        }
+        ctx.restore();
+        return;
+    }
+
+    if (stroke.points.length === 1) {
+        ctx.beginPath();
+        ctx.arc(stroke.points[0].x, stroke.points[0].y, ctx.lineWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        }
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function redrawSketchCanvas() {
+    if (!sketchCanvas) return;
+    const ctx = sketchCanvas.getContext('2d');
+    ctx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+
+    for (const stroke of sketchSession.strokes) {
+        drawSketchStroke(ctx, stroke);
+    }
+    if (sketchSession.currentStroke) {
+        drawSketchStroke(ctx, sketchSession.currentStroke);
+    }
+}
+
+function getSingleSketchStrokeBounds(stroke) {
+    if (stroke.tool === 'text' && stroke.points.length) {
+        const { width, height } = measureSketchTextStroke(stroke);
+        const x = stroke.points[0].x;
+        const y = stroke.points[0].y;
+        return {
+            minX: x,
+            minY: y,
+            maxX: x + width,
+            maxY: y + height
+        };
+    }
+
+    const pad = stroke.width / 2;
+
+    if (isSketchShapeTool(stroke.tool) && stroke.points.length >= 2) {
+        const rect = getSketchShapeRect(stroke.points);
+        if (!rect) return null;
+        return {
+            minX: rect.x - pad,
+            minY: rect.y - pad,
+            maxX: rect.x + rect.w + pad,
+            maxY: rect.y + rect.h + pad
+        };
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const point of stroke.points) {
+        minX = Math.min(minX, point.x - pad);
+        minY = Math.min(minY, point.y - pad);
+        maxX = Math.max(maxX, point.x + pad);
+        maxY = Math.max(maxY, point.y + pad);
+    }
+
+    if (!Number.isFinite(minX)) return null;
+    return { minX, minY, maxX, maxY };
+}
+
+function scaleSketchStrokes(prevWidth, prevHeight, nextWidth, nextHeight) {
+    if (prevWidth <= 0 || prevHeight <= 0) return;
+    if (prevWidth === nextWidth && prevHeight === nextHeight) return;
+
+    const scaleX = nextWidth / prevWidth;
+    const scaleY = nextHeight / prevHeight;
+    const scaleStroke = (stroke) => {
+        if (!stroke) return;
+        stroke.width *= scaleX;
+        for (const point of stroke.points) {
+            point.x *= scaleX;
+            point.y *= scaleY;
+        }
+    };
+    sketchSession.strokes.forEach(scaleStroke);
+    scaleStroke(sketchSession.currentStroke);
+}
+
+function getSketchCanvasMaxBounds() {
+    const wrap = sketchCanvas?.closest('.sketch-canvas-wrap');
+    if (!wrap) {
+        return { maxWidth: 640, maxHeight: 400 };
+    }
+
+    const rect = wrap.getBoundingClientRect();
+    const style = window.getComputedStyle(wrap);
+    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+
+    return {
+        maxWidth: Math.max(Math.floor(rect.width - padX), SKETCH_CANVAS_MIN.width),
+        maxHeight: Math.max(Math.floor(rect.height - padY), SKETCH_CANVAS_MIN.height)
+    };
+}
+
+function setSketchCanvasDimensions(width, height) {
+    if (!sketchCanvas) return;
+
+    const { maxWidth, maxHeight } = getSketchCanvasMaxBounds();
+    const nextWidth = clampSketchCanvasDimension(
+        Math.min(width, maxWidth),
+        SKETCH_CANVAS_MIN.width,
+        SKETCH_CANVAS_MAX.width
+    );
+    const nextHeight = clampSketchCanvasDimension(
+        Math.min(height, maxHeight),
+        SKETCH_CANVAS_MIN.height,
+        SKETCH_CANVAS_MAX.height
+    );
+
+    sketchSession.canvasWidth = nextWidth;
+    sketchSession.canvasHeight = nextHeight;
+    sketchSession.dpr = window.devicePixelRatio || 1;
+
+    sketchCanvas.style.width = `${nextWidth}px`;
+    sketchCanvas.style.height = `${nextHeight}px`;
+    sketchCanvas.width = Math.floor(nextWidth * sketchSession.dpr);
+    sketchCanvas.height = Math.floor(nextHeight * sketchSession.dpr);
+
+    redrawSketchCanvas();
+    updateSketchCanvasSizeLabel();
+}
+
+function getSketchDefaultCanvasSize() {
+    const { maxWidth, maxHeight } = getSketchCanvasMaxBounds();
+    let width = maxWidth;
+    let height = Math.round(width * 0.58);
+
+    if (height > maxHeight) {
+        height = maxHeight;
+        width = Math.round(height / 0.58);
+    }
+
+    return {
+        width: clampSketchCanvasDimension(width, SKETCH_CANVAS_MIN.width, SKETCH_CANVAS_MAX.width),
+        height: clampSketchCanvasDimension(height, SKETCH_CANVAS_MIN.height, SKETCH_CANVAS_MAX.height)
+    };
+}
+
+function applySketchCanvasSize() {
+    setSketchCanvasDimensions(sketchSession.canvasWidth, sketchSession.canvasHeight);
+}
+
+function getSketchStrokeBounds() {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const stroke of sketchSession.strokes) {
+        const bounds = getSingleSketchStrokeBounds(stroke);
+        if (!bounds) continue;
+        minX = Math.min(minX, bounds.minX);
+        minY = Math.min(minY, bounds.minY);
+        maxX = Math.max(maxX, bounds.maxX);
+        maxY = Math.max(maxY, bounds.maxY);
+    }
+
+    if (!Number.isFinite(minX)) return null;
+    return { minX, minY, maxX, maxY };
+}
+
+function updateSketchToolbarUi() {
+    sketchOverlay?.querySelectorAll('[data-sketch-tool]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.sketchTool === sketchSession.tool);
+    });
+
+    const activeColor = normalizeSketchColor(sketchSession.color);
+    let matchedPreset = false;
+    sketchColorGrid?.querySelectorAll('.sketch-color-btn').forEach((btn) => {
+        const isActive = normalizeSketchColor(btn.dataset.color) === activeColor;
+        btn.classList.toggle('is-active', isActive);
+        if (isActive) matchedPreset = true;
+    });
+    if (sketchColorPicker) {
+        sketchColorPicker.value = activeColor;
+        sketchColorPicker.closest('.sketch-color-custom')?.classList.toggle('is-active', !matchedPreset);
+    }
+
+    const sizeOptions = getSketchSizeOptions();
+    sketchSession.sizeIndex = Math.max(0, Math.min(sizeOptions.length - 1, sketchSession.sizeIndex));
+    if (sketchSizeLabel) {
+        sketchSizeLabel.textContent = sketchSession.tool === 'text' ? 'Text' : 'Brush';
+    }
+    if (sketchSizeValue) {
+        sketchSizeValue.textContent = String(getSketchSizeValue());
+    }
+    if (sketchSizePrev) {
+        sketchSizePrev.disabled = sketchSession.sizeIndex <= 0;
+    }
+    if (sketchSizeNext) {
+        sketchSizeNext.disabled = sketchSession.sizeIndex >= sizeOptions.length - 1;
+    }
+
+    updateSketchCanvasSizeLabel();
+
+    if (sketchCanvas) {
+        let cursor = 'crosshair';
+        if (sketchSession.tool === 'eraser') cursor = 'cell';
+        if (sketchSession.tool === 'text') cursor = 'text';
+        sketchCanvas.style.cursor = cursor;
+    }
+
+    if (sketchUndoBtn) {
+        sketchUndoBtn.disabled = sketchSession.strokes.length === 0;
+    }
+}
+
+function setSketchTool(tool) {
+    if (tool !== 'text') {
+        cancelSketchTextInput();
+    }
+    const prevOptions = getSketchSizeOptions();
+    const prevValue = getSketchSizeValue();
+    sketchSession.tool = tool;
+    const nextOptions = getSketchSizeOptions();
+    let nextIndex = nextOptions.indexOf(prevValue);
+    if (nextIndex === -1) {
+        nextIndex = Math.round((sketchSession.sizeIndex / Math.max(prevOptions.length - 1, 1)) * (nextOptions.length - 1));
+    }
+    sketchSession.sizeIndex = nextIndex;
+    updateSketchToolbarUi();
+}
+
+function setSketchColor(color) {
+    sketchSession.color = normalizeSketchColor(color);
+    if (sketchSession.tool === 'eraser') {
+        setSketchTool('pen');
+    } else {
+        updateSketchToolbarUi();
+    }
+}
+
+function stepSketchSize(delta) {
+    const options = getSketchSizeOptions();
+    sketchSession.sizeIndex = Math.max(0, Math.min(options.length - 1, sketchSession.sizeIndex + delta));
+    updateSketchToolbarUi();
+}
+
+function renderSketchColorGrid() {
+    if (!sketchColorGrid) return;
+    sketchColorGrid.innerHTML = SKETCH_PALETTE.map((color) => (
+        `<button type="button" class="sketch-color-btn${normalizeSketchColor(color) === normalizeSketchColor(sketchSession.color) ? ' is-active' : ''}" data-color="${color}" aria-label="Color ${color}" title="${color}" style="--swatch-color: ${color}"></button>`
+    )).join('');
+    sketchColorGrid.querySelectorAll('.sketch-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setSketchColor(btn.dataset.color));
+    });
+}
+
+async function placeSketchTextAt(point) {
+    showSketchTextInput(point);
+}
+
+function showSketchTextInput(point) {
+    if (!sketchTextInput || !sketchCanvas) return;
+
+    cancelSketchTextInput(false);
+
+    const rect = sketchCanvas.getBoundingClientRect();
+    const scaleX = rect.width / sketchCanvas.width;
+    const scaleY = rect.height / sketchCanvas.height;
+    const fontSize = getSketchSizeValue();
+
+    sketchTextEdit = {
+        point,
+        fontSize: getSketchStrokeWidth(getSketchSizeValue())
+    };
+
+    sketchTextInput.style.left = `${rect.left + point.x * scaleX}px`;
+    sketchTextInput.style.top = `${rect.top + point.y * scaleY}px`;
+    sketchTextInput.style.fontSize = `${fontSize}px`;
+    sketchTextInput.style.color = sketchSession.color;
+    sketchTextInput.style.minWidth = `${Math.max(fontSize * 4, 80)}px`;
+    sketchTextInput.value = '';
+    sketchTextInput.classList.remove('hidden');
+    sketchTextInput.focus();
+}
+
+function commitSketchTextInput() {
+    if (!sketchTextInput || !sketchTextEdit) return;
+
+    const text = sketchTextInput.value.trim();
+    const edit = sketchTextEdit;
+    hideSketchTextInput();
+
+    if (!text) return;
+
+    sketchSession.undone = [];
+    sketchSession.strokes.push({
+        tool: 'text',
+        color: sketchSession.color,
+        text,
+        fontSize: edit.fontSize,
+        width: 0,
+        points: [edit.point]
+    });
+    redrawSketchCanvas();
+    updateSketchToolbarUi();
+}
+
+function cancelSketchTextInput(clearEdit = true) {
+    hideSketchTextInput();
+    if (clearEdit) sketchTextEdit = null;
+}
+
+function hideSketchTextInput() {
+    if (!sketchTextInput) return;
+    sketchTextInput.classList.add('hidden');
+    sketchTextInput.value = '';
+    if (sketchTextEdit) sketchTextEdit = null;
+}
+
+function sketchResizePointerDown(e) {
+    if (!sketchResizeHandle || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    sketchSession.isResizing = true;
+    sketchResizeState = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: sketchSession.canvasWidth,
+        startHeight: sketchSession.canvasHeight
+    };
+    sketchResizeHandle.setPointerCapture(e.pointerId);
+}
+
+function sketchResizePointerMove(e) {
+    if (!sketchResizeState || e.pointerId !== sketchResizeState.pointerId) return;
+    e.preventDefault();
+
+    const dx = e.clientX - sketchResizeState.startX;
+    const dy = e.clientY - sketchResizeState.startY;
+    setSketchCanvasDimensions(
+        sketchResizeState.startWidth + dx,
+        sketchResizeState.startHeight + dy
+    );
+}
+
+function sketchResizePointerUp(e) {
+    if (!sketchResizeState || e.pointerId !== sketchResizeState.pointerId) return;
+    e.preventDefault();
+
+    if (sketchResizeHandle?.hasPointerCapture?.(e.pointerId)) {
+        sketchResizeHandle.releasePointerCapture(e.pointerId);
+    }
+    sketchSession.isResizing = false;
+    sketchResizeState = null;
+}
+
+function sketchPointerDown(e) {
+    if (!sketchCanvas || e.button !== 0 || sketchSession.isResizing) return;
+    e.preventDefault();
+
+    if (sketchSession.tool === 'text') {
+        placeSketchTextAt(getSketchCanvasPoint(e));
+        return;
+    }
+
+    sketchCanvas.setPointerCapture(e.pointerId);
+
+    const point = getSketchCanvasPoint(e);
+    sketchSession.isDrawing = true;
+    sketchSession.undone = [];
+    sketchSession.currentStroke = {
+        tool: sketchSession.tool,
+        color: sketchSession.color,
+        width: getSketchStrokeWidth(getSketchSizeValue()),
+        points: [point]
+    };
+
+    if (isSketchShapeTool(sketchSession.tool)) {
+        sketchSession.currentStroke.points.push({ ...point });
+    }
+
+    redrawSketchCanvas();
+}
+
+function sketchPointerMove(e) {
+    if (!sketchSession.isDrawing || !sketchSession.currentStroke) return;
+    e.preventDefault();
+    const point = getSketchCanvasPoint(e);
+
+    if (isSketchShapeTool(sketchSession.tool)) {
+        sketchSession.currentStroke.points[1] = point;
+    } else {
+        sketchSession.currentStroke.points.push(point);
+    }
+    redrawSketchCanvas();
+}
+
+function sketchPointerUp(e) {
+    if (!sketchSession.isDrawing || !sketchSession.currentStroke) return;
+    e.preventDefault();
+    if (sketchCanvas.hasPointerCapture?.(e.pointerId)) {
+        sketchCanvas.releasePointerCapture(e.pointerId);
+    }
+
+    const stroke = sketchSession.currentStroke;
+    if (isSketchShapeTool(stroke.tool)) {
+        const [p0, p1] = stroke.points;
+        const moved = Math.hypot(p1.x - p0.x, p1.y - p0.y) > 2 * sketchSession.dpr;
+        if (!moved) {
+            sketchSession.currentStroke = null;
+            sketchSession.isDrawing = false;
+            redrawSketchCanvas();
+            return;
+        }
+    }
+
+    sketchSession.strokes.push(stroke);
+    sketchSession.currentStroke = null;
+    sketchSession.isDrawing = false;
+    redrawSketchCanvas();
+    updateSketchToolbarUi();
+}
+
+function sketchUndo() {
+    if (!sketchSession.strokes.length) return;
+    const stroke = sketchSession.strokes.pop();
+    sketchSession.undone.push(stroke);
+    redrawSketchCanvas();
+    updateSketchToolbarUi();
+}
+
+async function sketchClear() {
+    if (!sketchSession.strokes.length) return;
+    const ok = await modalConfirm('Clear the entire drawing?', 'Clear canvas');
+    if (!ok) return;
+    sketchSession.strokes = [];
+    sketchSession.undone = [];
+    sketchSession.currentStroke = null;
+    redrawSketchCanvas();
+    updateSketchToolbarUi();
+}
+
+function sketchExportPngBlob({ crop = false } = {}) {
+    return new Promise((resolve) => {
+        if (!sketchCanvas) {
+            resolve(null);
+            return;
+        }
+
+        if (!crop) {
+            sketchCanvas.toBlob((blob) => resolve(blob), 'image/png');
+            return;
+        }
+
+        const bounds = getSketchStrokeBounds();
+        if (!bounds) {
+            sketchCanvas.toBlob((blob) => resolve(blob), 'image/png');
+            return;
+        }
+
+        const padding = Math.round(12 * sketchSession.dpr);
+        const x = Math.max(0, Math.floor(bounds.minX - padding));
+        const y = Math.max(0, Math.floor(bounds.minY - padding));
+        const w = Math.min(
+            sketchCanvas.width - x,
+            Math.ceil(bounds.maxX - bounds.minX + padding * 2)
+        );
+        const h = Math.min(
+            sketchCanvas.height - y,
+            Math.ceil(bounds.maxY - bounds.minY + padding * 2)
+        );
+
+        if (w <= 0 || h <= 0) {
+            sketchCanvas.toBlob((blob) => resolve(blob), 'image/png');
+            return;
+        }
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = w;
+        exportCanvas.height = h;
+        const ctx = exportCanvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(sketchCanvas, x, y, w, h, 0, 0, w, h);
+        exportCanvas.toBlob((blob) => resolve(blob), 'image/png');
+    });
+}
+
+function openSketchModal() {
+    if (!state.activePage || !quill) return;
+
+    resetSketchSession();
+    sketchOverlay?.classList.remove('hidden');
+    sketchOverlay?.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            const { width, height } = getSketchDefaultCanvasSize();
+            sketchSession.canvasWidth = width;
+            sketchSession.canvasHeight = height;
+            applySketchCanvasSize();
+            sketchCanvas?.focus();
+        });
+    });
+}
+
+function closeSketchModal() {
+    cancelSketchTextInput();
+    sketchSession.isDrawing = false;
+    sketchSession.currentStroke = null;
+    sketchOverlay?.classList.add('hidden');
+    sketchOverlay?.setAttribute('aria-hidden', 'true');
+}
+
+async function requestCloseSketchModal() {
+    if (!sketchSession.strokes.length) {
+        closeSketchModal();
+        return;
+    }
+    const ok = await modalConfirm('Discard your drawing?', 'Unsaved drawing');
+    if (ok) closeSketchModal();
+}
+
+async function insertSketchIntoNote() {
+    if (!state.activePage || !quill) return;
+    if (!sketchSession.strokes.length) {
+        await modalAlert('Draw something before inserting.', 'Empty sketch');
+        return;
+    }
+
+    sketchInsertBtn.disabled = true;
+    try {
+        const crop = sketchCropToggle?.checked !== false;
+        const blob = await sketchExportPngBlob({ crop });
+        if (!blob) {
+            await modalAlert('Could not export the drawing.', 'Export failed');
+            return;
+        }
+
+        const file = new File([blob], 'sketch.png', { type: 'image/png' });
+        const data = await uploadPageImage(file, { ocr: false });
+
+        if (data.success) {
+            const range = quill.getSelection(true);
+            quill.insertEmbed(range.index, 'image', data.url);
+            quill.setSelection(range.index + 1);
+            scheduleSave();
+            closeSketchModal();
+        } else {
+            setSaveStatus('error', 'Upload failed');
+            await modalAlert(data.error || 'Upload failed', 'Upload failed');
+        }
+    } catch (err) {
+        console.error(err);
+        setSaveStatus('error', 'Upload failed');
+        await modalAlert('Upload failed. Please try again.', 'Upload failed');
+    } finally {
+        sketchInsertBtn.disabled = false;
+    }
+}
+
+function initSketchModal() {
+    if (!sketchOverlay || !sketchCanvas) return;
+
+    renderSketchColorGrid();
+
+    sketchCloseBtn?.addEventListener('click', () => requestCloseSketchModal());
+    sketchCancelBtn?.addEventListener('click', () => requestCloseSketchModal());
+    sketchInsertBtn?.addEventListener('click', () => insertSketchIntoNote());
+    sketchUndoBtn?.addEventListener('click', () => sketchUndo());
+    sketchClearBtn?.addEventListener('click', () => sketchClear());
+    sketchSizePrev?.addEventListener('click', () => stepSketchSize(-1));
+    sketchSizeNext?.addEventListener('click', () => stepSketchSize(1));
+    sketchColorPicker?.addEventListener('input', (e) => setSketchColor(e.target.value));
+
+    sketchTextInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commitSketchTextInput();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelSketchTextInput();
+        }
+    });
+    sketchTextInput?.addEventListener('blur', () => {
+        if (sketchTextEdit) commitSketchTextInput();
+    });
+
+    sketchOverlay.querySelectorAll('[data-sketch-tool]').forEach((btn) => {
+        btn.addEventListener('click', () => setSketchTool(btn.dataset.sketchTool));
+    });
+
+    sketchOverlay.addEventListener('click', (e) => {
+        if (e.target === sketchOverlay) requestCloseSketchModal();
+    });
+
+    sketchResizeHandle?.addEventListener('pointerdown', sketchResizePointerDown);
+    sketchResizeHandle?.addEventListener('pointermove', sketchResizePointerMove);
+    sketchResizeHandle?.addEventListener('pointerup', sketchResizePointerUp);
+    sketchResizeHandle?.addEventListener('pointercancel', sketchResizePointerUp);
+
+    sketchCanvas.addEventListener('pointerdown', sketchPointerDown);
+    sketchCanvas.addEventListener('pointermove', sketchPointerMove);
+    sketchCanvas.addEventListener('pointerup', sketchPointerUp);
+    sketchCanvas.addEventListener('pointercancel', sketchPointerUp);
+    sketchCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    window.addEventListener('resize', () => {
+        if (sketchOverlay && !sketchOverlay.classList.contains('hidden')) {
+            setSketchCanvasDimensions(sketchSession.canvasWidth, sketchSession.canvasHeight);
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sketchOverlay && !sketchOverlay.classList.contains('hidden')) {
+            e.preventDefault();
+            requestCloseSketchModal();
+        }
+    });
 }
 
 // Search
