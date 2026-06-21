@@ -43,7 +43,7 @@ Environment variables (optional):
 | `DB_NAME`      | `mynote_local`     | MySQL database name      |
 | `DB_USER`      | `mynote_local`     | MySQL user               |
 | `DB_PASS`      | (random)           | MySQL password           |
-| `ADMIN_EMAIL`  | `admin@localhost`  | Initial admin email      |
+| `ADMIN_EMAIL`  | `admin@example.com` | Initial admin email     |
 | `ADMIN_PASS`   | (random)           | Initial admin password   |
 
 ### Manual local setup

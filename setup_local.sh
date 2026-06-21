@@ -3,13 +3,27 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-DB_NAME="${DB_NAME:-mynote_local}"
-DB_USER="${DB_USER:-mynote_local}"
-DB_PASS="${DB_PASS:-$(openssl rand -base64 24 2>/dev/null || php -r 'echo bin2hex(random_bytes(16));')}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
 ADMIN_PASS="${ADMIN_PASS:-$(openssl rand -base64 18 2>/dev/null || php -r 'echo bin2hex(random_bytes(12));')}"
 
-if [[ ! -f api/config.local.php ]]; then
+load_db_config_from_file() {
+    mapfile -t _cfg < <(php -r '$c = require "api/config.local.php"; echo ($c["db_name"] ?? "")."\n".($c["db_user"] ?? "")."\n".($c["db_pass"] ?? "");')
+    DB_NAME="${_cfg[0]}"
+    DB_USER="${_cfg[1]}"
+    DB_PASS="${_cfg[2]}"
+    if [[ -z "$DB_NAME" || -z "$DB_USER" || -z "$DB_PASS" ]]; then
+        echo "ERROR: api/config.local.php is missing db_name, db_user, or db_pass." >&2
+        exit 1
+    fi
+}
+
+if [[ -f api/config.local.php ]]; then
+    load_db_config_from_file
+    echo "Using database settings from api/config.local.php (${DB_USER}@${DB_NAME})"
+else
+    DB_NAME="${DB_NAME:-mynote_local}"
+    DB_USER="${DB_USER:-mynote_local}"
+    DB_PASS="${DB_PASS:-$(openssl rand -base64 24 2>/dev/null || php -r 'echo bin2hex(random_bytes(16));')}"
     APP_SECRET="$(openssl rand -hex 32 2>/dev/null || php -r 'echo bin2hex(random_bytes(32));')"
     cat > api/config.local.php <<PHP
 <?php
@@ -22,8 +36,6 @@ return [
 ];
 PHP
     echo "Created api/config.local.php"
-else
-    echo "Using existing api/config.local.php"
 fi
 
 echo "Creating MySQL database, user, and tables..."
@@ -31,6 +43,7 @@ sudo mysql <<SQL
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
 
