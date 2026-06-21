@@ -1962,6 +1962,85 @@ body.dark .search-hl {
     margin-left: auto;
 }
 
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.theme-toggle:focus-visible {
+    outline: none;
+}
+
+.theme-toggle:focus-visible .theme-toggle-track {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    border-color: rgba(99, 102, 241, 0.45);
+}
+
+.theme-toggle-track {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    width: 3.35rem;
+    height: 1.85rem;
+    padding: 0.15rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.theme-toggle:hover .theme-toggle-track {
+    border-color: var(--text-muted);
+    background: var(--bg-surface);
+}
+
+.theme-toggle-option {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    transition: color var(--transition);
+}
+
+.theme-toggle-option-light {
+    color: var(--text-primary);
+}
+
+body.dark .theme-toggle-option-light {
+    color: var(--text-muted);
+}
+
+body.dark .theme-toggle-option-dark {
+    color: var(--text-primary);
+}
+
+.theme-toggle-thumb {
+    position: absolute;
+    top: 0.15rem;
+    left: 0.15rem;
+    width: calc(50% - 0.15rem);
+    height: calc(100% - 0.3rem);
+    border-radius: 999px;
+    background: var(--bg-surface);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.04);
+    transition: transform 0.22s ease, background var(--transition);
+}
+
+body.dark .theme-toggle-thumb {
+    transform: translateX(100%);
+    background: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
 .editor-meta {
     font-size: 0.78rem;
     color: var(--text-muted);

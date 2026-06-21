@@ -1927,13 +1927,12 @@ function updateBreadcrumb(page) {
 
 function updateThemeUI() {
     const isDark = document.body.classList.contains('dark');
-    const iconClass = isDark ? 'fa-solid fa-sun theme-icon' : 'fa-solid fa-moon theme-icon';
-    const label = isDark ? 'Light Mode' : 'Dark Mode';
 
-    const icon = themeToggleBtn.querySelector('.theme-icon');
-    const labelEl = themeToggleBtn.querySelector('.theme-label');
-    if (icon) icon.className = iconClass;
-    if (labelEl) labelEl.textContent = label;
+    if (themeToggleBtn) {
+        themeToggleBtn.setAttribute('aria-checked', String(isDark));
+        themeToggleBtn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+        themeToggleBtn.title = isDark ? 'Light mode' : 'Dark mode';
+    }
 
     const railIcon = railThemeBtn?.querySelector('.rail-theme-icon');
     if (railIcon) {
@@ -1941,6 +1940,7 @@ function updateThemeUI() {
     }
     if (railThemeBtn) {
         railThemeBtn.dataset.tooltip = isDark ? 'Light mode' : 'Dark mode';
+        railThemeBtn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
     }
 }
 
