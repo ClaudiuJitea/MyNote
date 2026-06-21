@@ -4,6 +4,30 @@ Self-hosted note-taking web app with a folder-style hierarchy, rich text editing
 
 The UI is branded **MyNotes**; the repository and deployment docs use **MyNote**.
 
+![MyNotes editor with sidebar, rich text formatting, and AI tools](img/main.png)
+
+## Screenshots
+
+### Dark mode
+
+Light and dark themes with the same layout and features.
+
+![MyNotes dashboard in dark mode](img/dark.png)
+
+### Account settings
+
+Personal OpenRouter API key, model selection, and per-user backup export/import.
+
+![Account settings with AI and backup options](img/account_panel.png)
+
+### Admin panel
+
+User management, system-wide backup, and admin AI configuration.
+
+![Admin panel with AI settings and user management](img/adm_panel.png)
+
+![Admin panel user list and system backup](img/adm_panel2.png)
+
 ## Features
 
 - **Hierarchy** — Organize notes in notebooks, sections, and pages with drag-and-drop reordering
@@ -28,7 +52,7 @@ The UI is branded **MyNotes**; the repository and deployment docs use **MyNote**
 On a Linux machine with PHP, MySQL, and `sudo` access:
 
 ```bash
-git clone <repository-url> MyNote
+git clone https://github.com/ClaudiuJitea/MyNote.git
 cd MyNote
 ./setup_local.sh
 php -S localhost:8000
@@ -113,6 +137,7 @@ MyNote/
     lib/              # Shared PHP libraries
   scripts/
     setup_admin_cli.php   # CLI admin user setup
+  img/                # README screenshots
   uploads/            # User-uploaded images (writable)
   data/               # Rate-limit state (writable, auto-created)
   setup_local.sh      # Local dev bootstrap script
