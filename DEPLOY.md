@@ -19,6 +19,27 @@ Required PHP extensions (enable in cPanel → **Select PHP Version** or **MultiP
 - `zip` (for backup export/import)
 - `fileinfo` (for upload validation)
 
+### Before pushing to GitHub
+
+If you used the app locally, check `api/config.local.php` before publishing:
+
+1. Confirm `api/config.local.php` is still listed in `.gitignore`.
+2. Do **not** commit real database credentials, passwords, or `app_secret` values.
+3. If you keep a local copy in your workspace, replace real values with generic placeholders before sharing screenshots or support bundles:
+
+```php
+<?php
+return [
+    'db_host' => 'localhost',
+    'db_name' => 'mynote_database',
+    'db_user' => 'mynote_user',
+    'db_pass' => 'change-this-database-password',
+    'app_secret' => 'local-dev-secret-change-before-production-deploy',
+];
+```
+
+If any real database password was ever committed or shared, rotate it before deploying.
+
 ---
 
 ## Step 1 — Upload the application
