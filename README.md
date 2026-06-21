@@ -4,15 +4,27 @@ Self-hosted note-taking web app with a folder-style hierarchy, rich text editing
 
 The UI is branded **MyNotes**; the repository and deployment docs use **MyNote**.
 
-![MyNotes editor with sidebar, rich text formatting, and AI tools](img/main.png)
+![MyNotes editor with sidebar, Starred toolbar button, and rich text formatting](img/main.png)
 
 ## Screenshots
+
+### Home dashboard
+
+Welcome screen with recently opened notes, starred notes, and a quick way to create a new note. Open it with the home button in the top bar.
+
+![MyNotes home dashboard with recently opened and starred notes](img/home.png)
+
+### Editor
+
+Rich text editing with breadcrumb navigation, table of contents, focus mode, and a **Star** button in the toolbar (next to AI) to add or remove notes from Starred.
+
+![MyNotes note editor with Starred button in the toolbar](img/main.png)
 
 ### Dark mode
 
 Light and dark themes with the same layout and features.
 
-![MyNotes dashboard in dark mode](img/dark.png)
+![MyNotes home dashboard in dark mode](img/dark.png)
 
 ### AI assistant
 
@@ -37,10 +49,16 @@ User management, system-wide backup, and admin AI configuration.
 ## Features
 
 - **Hierarchy** — Organize notes in notebooks, sections, and pages with drag-and-drop reordering
+- **Home dashboard** — Recently opened notes, starred notes, and one-click create when no note is open
 - **Rich text editor** — Write and format notes with [Quill](https://quilljs.com/)
 - **Search** — Full-text search across all of your notes
 - **Images** — Upload images to notes; OCR text is stored for search
-- **Favorites** — Mark pages as favorites for quick access
+- **Starred notes** — Star a note from the editor toolbar (next to AI) or from the sidebar; starred notes appear in a dedicated sidebar section and on Home
+- **Table of contents** — Auto-generated from headings inside the current note
+- **Focus mode** — Hide the sidebar and other chrome to focus on writing
+- **Note breadcrumb** — See the notebook and section path above the title
+- **Editor stats** — Word count, character count, and estimated read time in the footer
+- **Collapsible sidebar** — Collapse the tree for more editor space
 - **Themes** — Light and dark mode
 - **Multi-user** — Admin and member roles; admins manage users from the admin panel
 - **AI (optional)** — Connect your own [OpenRouter](https://openrouter.ai/) API key to translate, summarize, generate content, create flashcards, quizzes, study plans, and more

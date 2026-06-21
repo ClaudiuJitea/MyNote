@@ -6,10 +6,11 @@ let state = {
     notebooks: [],
     sectionsCache: {},
     pagesCache: {},
-    expanded: { root: true, notebooks: new Set(), sections: new Set() },
+    expanded: { root: true, starred: true, notebooks: new Set(), sections: new Set() },
     activeNotebook: null,
     activeSection: null,
     activePage: null,
+    starredPages: [],
     hasAiKey: false,
     aiModel: 'google/gemma-4-26b-a4b-it'
 };
@@ -100,6 +101,11 @@ const searchInput = document.getElementById('searchInput');
 const searchClearBtn = document.getElementById('searchClearBtn');
 const searchResults = document.getElementById('searchResults');
 const homeBtn = document.getElementById('homeBtn');
+const editorFavoriteBtn = document.getElementById('editorFavoriteBtn');
+const homeRecentList = document.getElementById('homeRecentList');
+const homeFavoritesList = document.getElementById('homeFavoritesList');
+
+const RECENT_PAGES_STORAGE_KEY = 'mynote_recent_pages';
 
 const adminPanelBtn = document.getElementById('adminPanelBtn');
 const adminView = document.getElementById('adminView');
@@ -631,6 +637,208 @@ function initEmptyState() {
     emptyCreateNoteBtn?.addEventListener('click', () => {
         createNoteWithLocationPicker();
     });
+
+    emptyEditor?.addEventListener('click', (e) => {
+        const item = e.target.closest('.home-note-item[data-page-id]');
+        if (item) {
+            openPage(item.dataset.pageId);
+        }
+    });
+}
+
+function getRecentPagesStorageKey() {
+    return state.userId ? `${RECENT_PAGES_STORAGE_KEY}_${state.userId}` : RECENT_PAGES_STORAGE_KEY;
+}
+
+function loadStoredRecentPageIds() {
+    try {
+        const raw = localStorage.getItem(getRecentPagesStorageKey());
+        const ids = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(ids)) return [];
+        return ids
+            .map(id => Number(id))
+            .filter(id => Number.isInteger(id) && id > 0);
+    } catch {
+        return [];
+    }
+}
+
+function loadRecentPageIds(limit = 3) {
+    return loadStoredRecentPageIds().slice(0, limit);
+}
+
+function saveRecentPageIds(ids) {
+    localStorage.setItem(getRecentPagesStorageKey(), JSON.stringify(ids.slice(0, 10)));
+}
+
+function recordRecentPage(pageId) {
+    const id = Number(pageId);
+    if (!id) return;
+    const ids = loadStoredRecentPageIds().filter(existingId => existingId !== id);
+    ids.unshift(id);
+    saveRecentPageIds(ids);
+}
+
+function removeRecentPage(pageId) {
+    const id = Number(pageId);
+    if (!id) return;
+    saveRecentPageIds(loadStoredRecentPageIds().filter(existingId => existingId !== id));
+}
+
+function renderHomeNoteItem(note) {
+    const title = escapeHtml(note.title || 'Untitled');
+    const path = escapeHtml(`${note.notebook_name || 'Folder'} / ${note.section_name || 'Subfolder'}`);
+    const meta = note.updated_at ? escapeHtml(formatRelativeTime(note.updated_at)) : '';
+    const isFavorite = Number(note.is_favorite) === 1;
+
+    return `
+        <button type="button" class="home-note-item" data-page-id="${note.id}">
+            <span class="home-note-icon" aria-hidden="true"><i class="fa-regular fa-file-lines"></i></span>
+            <span class="home-note-body">
+                <span class="home-note-title">
+                    ${title}
+                    ${isFavorite ? '<i class="fa-solid fa-star home-note-star" aria-hidden="true"></i>' : ''}
+                </span>
+                <span class="home-note-path">${path}</span>
+            </span>
+            ${meta ? `<span class="home-note-meta">${meta}</span>` : ''}
+        </button>
+    `;
+}
+
+function renderHomeNoteEmpty(message) {
+    return `<p class="home-note-empty">${escapeHtml(message)}</p>`;
+}
+
+async function renderHomePage() {
+    if (!homeRecentList || !homeFavoritesList || !state.userId) return;
+
+    homeRecentList.innerHTML = renderHomeNoteEmpty('Loading…');
+    homeFavoritesList.innerHTML = renderHomeNoteEmpty('Loading…');
+
+    const recentIds = loadRecentPageIds(3);
+    const params = new URLSearchParams({ highlights: '1' });
+    if (recentIds.length) {
+        params.set('recent', recentIds.join(','));
+    }
+
+    try {
+        const res = await apiFetch(`api/pages.php?${params}`);
+        const data = await res.json();
+        const recent = Array.isArray(data.recent) ? data.recent : [];
+        const favorites = Array.isArray(data.favorites) ? data.favorites : [];
+
+        homeRecentList.innerHTML = recent.length
+            ? recent.map(renderHomeNoteItem).join('')
+            : renderHomeNoteEmpty('No recent notes yet. Open a note from the sidebar.');
+
+        homeFavoritesList.innerHTML = favorites.length
+            ? favorites.map(renderHomeNoteItem).join('')
+            : renderHomeNoteEmpty('Star a note while editing to add it here.');
+    } catch {
+        homeRecentList.innerHTML = renderHomeNoteEmpty('Could not load recent notes.');
+        homeFavoritesList.innerHTML = renderHomeNoteEmpty('Could not load favorites.');
+    }
+}
+
+async function refreshHomePage() {
+    if (!emptyEditor || emptyEditor.classList.contains('hidden') || !state.userId) return;
+    await renderHomePage();
+}
+
+function isPageStarred(pageId) {
+    const id = Number(pageId);
+    if (!id) return false;
+    if (state.activePage?.id == id) {
+        return Number(state.activePage.is_favorite) === 1;
+    }
+    for (const sectionId of Object.keys(state.pagesCache)) {
+        const page = state.pagesCache[sectionId]?.find(p => p.id == id);
+        if (page) {
+            return Number(page.is_favorite) === 1;
+        }
+    }
+    return state.starredPages.some(p => p.id == id);
+}
+
+async function loadStarredPages() {
+    if (!state.userId) {
+        state.starredPages = [];
+        return;
+    }
+
+    try {
+        const res = await apiFetch('api/pages.php?starred=1');
+        const data = await res.json();
+        state.starredPages = Array.isArray(data) ? data : [];
+    } catch {
+        state.starredPages = [];
+    }
+}
+
+function syncPageFavoriteInCache(pageId, isFavorite) {
+    const id = Number(pageId);
+    const value = isFavorite ? 1 : 0;
+
+    for (const sectionId of Object.keys(state.pagesCache)) {
+        const page = state.pagesCache[sectionId]?.find(p => p.id == id);
+        if (page) {
+            page.is_favorite = value;
+        }
+    }
+
+    if (state.activePage?.id == id) {
+        state.activePage.is_favorite = value;
+        updateFavoriteButton(!!isFavorite);
+    }
+}
+
+async function setPageFavorite(pageId, isFavorite) {
+    const id = Number(pageId);
+    if (!id) return false;
+
+    const newValue = isFavorite ? 1 : 0;
+    const res = await apiFetch('api/pages.php', {
+        method: 'PUT',
+        body: JSON.stringify({ id, is_favorite: newValue })
+    });
+    if (!res.ok) return false;
+
+    syncPageFavoriteInCache(id, isFavorite);
+    await loadStarredPages();
+    renderTree();
+    await refreshHomePage();
+    return true;
+}
+
+async function toggleFavoriteForPage(pageId) {
+    return setPageFavorite(pageId, !isPageStarred(pageId));
+}
+
+function updateFavoriteButton(isFavorite) {
+    if (!editorFavoriteBtn) return;
+    const active = !!isFavorite;
+    editorFavoriteBtn.classList.toggle('is-favorite', active);
+    editorFavoriteBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    editorFavoriteBtn.title = active ? 'Remove from Starred' : 'Add to Starred';
+    editorFavoriteBtn.setAttribute('aria-label', active ? 'Remove from Starred' : 'Add to Starred');
+    const icon = editorFavoriteBtn.querySelector('i');
+    if (icon) {
+        icon.className = active ? 'fa-solid fa-star' : 'fa-regular fa-star';
+    }
+    const label = editorFavoriteBtn.querySelector('.editor-action-label');
+    if (label) {
+        label.textContent = active ? 'Starred' : 'Star';
+    }
+}
+
+async function toggleFavorite() {
+    if (!state.activePage) return;
+    await toggleFavoriteForPage(state.activePage.id);
+}
+
+function initEditorFavorite() {
+    editorFavoriteBtn?.addEventListener('click', toggleFavorite);
 }
 
 const USER_AI_FORM = {
@@ -1688,6 +1896,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEditorEnhancements();
     initSearch();
     initEmptyState();
+    initEditorFavorite();
     initAiSettings();
     initAiPalette();
     initBackupControls();
@@ -2624,6 +2833,10 @@ function buildTreeContextMenuItems(target) {
             return [
                 { action: 'create-page', id: target.sectionId, label: 'New note', icon: 'fa-file-circle-plus' },
                 { divider: true },
+                isPageStarred(target.id)
+                    ? { action: 'unstar', type: 'page', id: target.id, label: 'Remove from Starred', icon: 'fa-star' }
+                    : { action: 'star', type: 'page', id: target.id, label: 'Add to Starred', icon: 'fa-star' },
+                { divider: true },
                 { action: 'rename', type: 'page', id: target.id, sectionId: target.sectionId, label: 'Rename', icon: 'fa-pen' },
                 { action: 'duplicate', type: 'page', id: target.id, sectionId: target.sectionId, label: 'Duplicate', icon: 'fa-copy' },
                 { divider: true },
@@ -2648,7 +2861,7 @@ function resolveTreeContextTarget(e) {
         if (treeType === 'section') {
             return { type: 'section', id: row.dataset.treeId };
         }
-        if (treeType === 'page') {
+        if (treeType === 'page' || treeType === 'starred-page') {
             return { type: 'page', id: row.dataset.treeId, sectionId: row.dataset.treeSectionId };
         }
 
@@ -2792,6 +3005,12 @@ async function handleTreeContextMenuClick(e) {
                 await duplicatePage(id, item.dataset.sectionId);
             }
             break;
+        case 'star':
+            await setPageFavorite(id, true);
+            break;
+        case 'unstar':
+            await setPageFavorite(id, false);
+            break;
         case 'delete':
             await deleteItem(item.dataset.type, id);
             break;
@@ -2834,6 +3053,10 @@ function handleTreeClick(e) {
     const id = actionEl.dataset.id;
 
     switch (action) {
+        case 'toggle-starred':
+            state.expanded.starred = state.expanded.starred === false;
+            renderTree();
+            break;
         case 'toggle-root':
             state.expanded.root = !state.expanded.root;
             renderTree();
@@ -2852,6 +3075,9 @@ function handleTreeClick(e) {
             break;
         case 'create-page':
             createPage(id);
+            break;
+        case 'toggle-favorite':
+            toggleFavoriteForPage(id);
             break;
         case 'open-page':
             if (e.target.closest('.tree-label')) {
@@ -2879,7 +3105,7 @@ function handleTreeLabelDblClick(e) {
     const row = label.closest('.tree-row');
     if (!row || row.classList.contains('tree-row-root')) return;
 
-    const type = row.dataset.treeType;
+    const type = row.dataset.treeType === 'starred-page' ? 'page' : row.dataset.treeType;
     const id = row.dataset.treeId;
     if (!type || !id || type === 'root') return;
 
@@ -3234,6 +3460,9 @@ async function renamePage(id, title, sectionId) {
         updateEditorMeta(state.activePage);
     }
 
+    const starred = state.starredPages.find(p => p.id == id);
+    if (starred) starred.title = title;
+
     return true;
 }
 
@@ -3555,8 +3784,9 @@ logoutBtn.onclick = async () => {
     state = {
         userId: null, role: null, email: null, notebooks: [],
         sectionsCache: {}, pagesCache: {},
-        expanded: { root: true, notebooks: new Set(), sections: new Set() },
+        expanded: { root: true, starred: true, notebooks: new Set(), sections: new Set() },
         activeNotebook: null, activeSection: null, activePage: null,
+        starredPages: [],
         hasAiKey: false,
         aiModel: 'google/gemma-4-26b-a4b-it'
     };
@@ -3593,7 +3823,11 @@ function showDashboard() {
 async function loadNotebooks(skipRender = false) {
     const res = await apiFetch('api/notebooks.php');
     state.notebooks = await res.json();
+    await loadStarredPages();
     if (!skipRender) renderTree();
+    if (!state.activePage) {
+        await refreshHomePage();
+    }
 }
 
 async function loadSectionsForNotebook(notebookId) {
@@ -3674,6 +3908,9 @@ async function openPage(pageId, options = {}) {
         }
         state.activeSection = page.section_id;
 
+        recordRecentPage(page.id);
+        updateFavoriteButton(Number(page.is_favorite) === 1);
+
         pageTitle.value = page.title;
         const delta = quill.clipboard.convert(removeSearchHighlightArtifacts(page.content || ''));
         quill.setContents(delta, 'silent');
@@ -3721,9 +3958,20 @@ function renderTree() {
     treeLabelEdit = null;
 
     const rootExpanded = state.expanded.root;
+    const starredExpanded = state.expanded.starred !== false;
 
     treeView.innerHTML = `
         <div class="tree">
+            <div class="tree-node tree-node-starred">
+                <div class="tree-row tree-row-root tree-row-starred" style="--tree-depth: 0" data-tree-type="starred-root">
+                    <button class="tree-toggle" data-action="toggle-starred" aria-label="Toggle Starred">
+                        <i class="fa-solid fa-chevron-${starredExpanded ? 'down' : 'right'}"></i>
+                    </button>
+                    <i class="fa-solid fa-star tree-icon tree-icon-starred"></i>
+                    <span class="tree-label">Starred</span>
+                </div>
+                ${starredExpanded ? `<div class="tree-children tree-children-starred">${renderStarredPagesTree(state.starredPages)}</div>` : ''}
+            </div>
             <div class="tree-node">
                 <div class="tree-row tree-row-root" style="--tree-depth: 0" data-tree-type="root">
                     <button class="tree-toggle" data-action="toggle-root" aria-label="Toggle library">
@@ -3756,6 +4004,51 @@ function renderTree() {
             }
         });
     }
+}
+
+function renderStarredPagesTree(pages) {
+    if (!pages.length) {
+        return '<div class="tree-empty tree-empty-starred" style="--tree-empty-depth: 1">Star notes for quick access</div>';
+    }
+
+    return pages.map(p => {
+        const isActive = state.activePage && state.activePage.id == p.id;
+        const title = escapeHtml(p.title || 'Untitled');
+        const path = escapeHtml(`${p.notebook_name || 'Folder'} / ${p.section_name || 'Subfolder'}`);
+
+        return `
+            <div class="tree-node">
+                <div class="tree-row tree-row-starred-note ${isActive ? 'active' : ''}" style="--tree-depth: 1" data-tree-type="starred-page" data-tree-id="${p.id}" data-tree-section-id="${p.section_id}" data-action="open-page" data-id="${p.id}" title="${path}">
+                    <span class="tree-toggle-spacer"></span>
+                    <i class="fa-solid fa-star tree-icon tree-icon-starred"></i>
+                    <span class="tree-label">
+                        <span class="tree-label-title">${title}</span>
+                        <span class="tree-label-meta">${path}</span>
+                    </span>
+                    <div class="tree-actions">
+                        <button class="tree-action tree-action-star is-starred" data-action="toggle-favorite" data-id="${p.id}" title="Remove from Starred" aria-label="Remove from Starred">
+                            <i class="fa-solid fa-star"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderPageStarButton(page) {
+    const isStarred = Number(page.is_favorite) === 1;
+    return `
+        <button
+            class="tree-action tree-action-star${isStarred ? ' is-starred' : ''}"
+            data-action="toggle-favorite"
+            data-id="${page.id}"
+            title="${isStarred ? 'Remove from Starred' : 'Add to Starred'}"
+            aria-label="${isStarred ? 'Remove from Starred' : 'Add to Starred'}"
+        >
+            <i class="${isStarred ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+        </button>
+    `;
 }
 
 function renderNotebooksTree() {
@@ -3842,6 +4135,7 @@ function renderPagesTree(pages, sectionId) {
                     <i class="fa-regular fa-file-lines tree-icon"></i>
                     <span class="tree-label">${escapeHtml(p.title || 'Untitled')}</span>
                     <div class="tree-actions">
+                        ${renderPageStarButton(p)}
                         <button class="tree-action tree-action-delete" data-action="delete" data-type="page" data-id="${p.id}" title="Delete note">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
@@ -3868,6 +4162,7 @@ function hideEditor() {
     editorBreadcrumb.innerHTML = '';
     resetEditorEnhancements();
     renderTree();
+    refreshHomePage();
 }
 
 // Creation
@@ -3968,7 +4263,10 @@ async function deleteItem(type, id, e) {
         for (const secId of Object.keys(state.pagesCache)) {
             state.pagesCache[secId] = state.pagesCache[secId].filter(p => p.id != id);
         }
+        removeRecentPage(id);
+        await loadStarredPages();
         if (state.activePage && state.activePage.id == id) hideEditor();
+        else await refreshHomePage();
     }
 
     renderTree();
@@ -4006,9 +4304,17 @@ async function savePage() {
             if (pageIndex > -1) {
                 pages[pageIndex].title = title;
                 pages[pageIndex].updated_at = now;
-                renderTree();
             }
         }
+
+        const starred = state.starredPages.find(p => p.id == state.activePage.id);
+        if (starred) {
+            starred.title = title;
+            starred.updated_at = now;
+            state.starredPages.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        }
+
+        renderTree();
     } catch (err) {
         setSaveStatus('error', 'Save failed');
     }

@@ -13,6 +13,72 @@ if ($method === 'GET') {
     $section_id = $_GET['section_id'] ?? null;
     $page_id = $_GET['page_id'] ?? null;
 
+    if (isset($_GET['highlights'])) {
+        $recentIds = [];
+        if (!empty($_GET['recent'])) {
+            $recentIds = array_values(array_unique(array_filter(array_map('intval', explode(',', (string)$_GET['recent'])))));
+            $recentIds = array_slice($recentIds, 0, 3);
+        }
+
+        $pageFields = '
+            p.id, p.section_id, p.title, p.is_favorite, p.updated_at,
+            s.name AS section_name, n.name AS notebook_name, n.id AS notebook_id
+        ';
+
+        $favoritesStmt = $pdo->prepare("
+            SELECT {$pageFields}
+            FROM pages p
+            JOIN sections s ON p.section_id = s.id
+            JOIN notebooks n ON s.notebook_id = n.id
+            WHERE n.user_id = ? AND p.is_favorite = 1
+            ORDER BY p.updated_at DESC
+            LIMIT 3
+        ");
+        $favoritesStmt->execute([$user_id]);
+        $favorites = $favoritesStmt->fetchAll();
+
+        $recent = [];
+        if ($recentIds) {
+            $placeholders = implode(',', array_fill(0, count($recentIds), '?'));
+            $recentStmt = $pdo->prepare("
+                SELECT {$pageFields}
+                FROM pages p
+                JOIN sections s ON p.section_id = s.id
+                JOIN notebooks n ON s.notebook_id = n.id
+                WHERE n.user_id = ? AND p.id IN ({$placeholders})
+            ");
+            $recentStmt->execute(array_merge([$user_id], $recentIds));
+            $byId = [];
+            foreach ($recentStmt->fetchAll() as $row) {
+                $byId[(int)$row['id']] = $row;
+            }
+            foreach ($recentIds as $id) {
+                if (isset($byId[$id])) {
+                    $recent[] = $byId[$id];
+                }
+            }
+        }
+
+        echo json_encode(['favorites' => $favorites, 'recent' => $recent]);
+        exit;
+    }
+
+    if (isset($_GET['starred'])) {
+        $stmt = $pdo->prepare("
+            SELECT
+                p.id, p.section_id, p.title, p.is_favorite, p.updated_at,
+                s.name AS section_name, n.name AS notebook_name, n.id AS notebook_id
+            FROM pages p
+            JOIN sections s ON p.section_id = s.id
+            JOIN notebooks n ON s.notebook_id = n.id
+            WHERE n.user_id = ? AND p.is_favorite = 1
+            ORDER BY p.updated_at DESC
+        ");
+        $stmt->execute([$user_id]);
+        echo json_encode($stmt->fetchAll());
+        exit;
+    }
+
     if ($page_id) {
         $stmt = $pdo->prepare("
             SELECT p.* FROM pages p 

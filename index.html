@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=14">
+    <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body class="light">
 
@@ -162,7 +162,9 @@
                         <article class="editor-sheet">
                             <header class="editor-header">
                                 <nav id="editorBreadcrumb" class="editor-breadcrumb" aria-label="Note location"></nav>
-                                <input type="text" id="pageTitle" placeholder="Untitled" class="page-title-input">
+                                <div class="editor-title-row">
+                                    <input type="text" id="pageTitle" placeholder="Untitled" class="page-title-input">
+                                </div>
                                 <div class="editor-actions" aria-label="Editor tools">
                                     <button type="button" id="editorUndoBtn" class="editor-action-btn" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
                                         <i class="fa-solid fa-rotate-left"></i>
@@ -178,6 +180,10 @@
                                     <button type="button" id="editorFocusBtn" class="editor-action-btn" aria-label="Focus mode" title="Focus mode" aria-pressed="false">
                                         <i class="fa-solid fa-expand"></i>
                                         <span class="editor-action-label">Focus</span>
+                                    </button>
+                                    <button type="button" id="editorFavoriteBtn" class="editor-action-btn" aria-label="Add to Starred" aria-pressed="false" title="Add to Starred">
+                                        <i class="fa-regular fa-star"></i>
+                                        <span class="editor-action-label">Star</span>
                                     </button>
                                     <button type="button" id="editorAiBtn" class="editor-action-btn editor-action-btn-ai" aria-label="AI commands" title="AI commands — Ctrl+Shift+A">
                                         <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -211,17 +217,38 @@
                     </div>
                 </div>
                 <div id="emptyEditor" class="empty-state">
-                    <div class="empty-state-content">
-                        <div class="empty-state-icon-wrap">
-                            <i class="fa-regular fa-file-lines empty-state-icon"></i>
+                    <div class="home-page">
+                        <header class="home-page-header">
+                            <div class="empty-state-icon-wrap">
+                                <i class="fa-regular fa-file-lines empty-state-icon"></i>
+                            </div>
+                            <h1 class="home-page-title">Welcome back</h1>
+                            <p class="home-page-subtitle">Pick up where you left off or start something new.</p>
+                        </header>
+
+                        <div class="home-page-grid">
+                            <section class="home-section" id="homeRecentSection" aria-labelledby="homeRecentHeading">
+                                <div class="home-section-head">
+                                    <h2 id="homeRecentHeading"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Recently opened</h2>
+                                </div>
+                                <div id="homeRecentList" class="home-note-list" aria-live="polite"></div>
+                            </section>
+
+                            <section class="home-section" id="homeFavoritesSection" aria-labelledby="homeFavoritesHeading">
+                                <div class="home-section-head">
+                                    <h2 id="homeFavoritesHeading"><i class="fa-solid fa-star" aria-hidden="true"></i> Starred</h2>
+                                </div>
+                                <div id="homeFavoritesList" class="home-note-list" aria-live="polite"></div>
+                            </section>
                         </div>
-                        <p class="empty-state-title">No note selected</p>
-                        <p class="empty-state-text">Expand a folder in the sidebar and select a note, or create a new one to start writing.</p>
-                        <button id="emptyCreateNoteBtn" class="btn btn-primary empty-state-action" type="button">
-                            <i class="fa-solid fa-plus"></i>
-                            Create new note
-                        </button>
-                        <p class="empty-state-hint"><kbd>Ctrl</kbd> + <kbd>S</kbd> to save when editing</p>
+
+                        <div class="home-page-actions">
+                            <button id="emptyCreateNoteBtn" class="btn btn-primary empty-state-action" type="button">
+                                <i class="fa-solid fa-plus"></i>
+                                Create new note
+                            </button>
+                            <p class="empty-state-hint"><kbd>Ctrl</kbd> + <kbd>S</kbd> to save when editing</p>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -642,6 +669,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
-    <script src="app.js?v=39"></script>
+    <script src="app.js?v=40"></script>
 </body>
 </html>
