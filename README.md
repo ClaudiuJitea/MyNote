@@ -14,6 +14,12 @@ Light and dark themes with the same layout and features.
 
 ![MyNotes dashboard in dark mode](img/dark.png)
 
+### AI assistant
+
+Command palette for writing help: improve clarity, fix grammar, shorten or expand text, change tone, continue writing, and more. Open with the AI button or `Ctrl+Shift+A`.
+
+![MyNotes AI command palette with writing tools](img/AI.png)
+
 ### Account settings
 
 Personal OpenRouter API key, model selection, and per-user backup export/import.
