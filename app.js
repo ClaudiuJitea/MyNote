@@ -7,6 +7,7 @@ let state = {
     sectionsCache: {},
     pagesCache: {},
     expanded: { root: true, starred: true, notebooks: new Set(), sections: new Set() },
+    selectedSection: null,
     activeNotebook: null,
     activeSection: null,
     activePage: null,
@@ -76,9 +77,13 @@ const sidebarFlyout = document.getElementById('sidebarFlyout');
 const sidebarFlyoutTitle = document.getElementById('sidebarFlyoutTitle');
 const sidebarFlyoutBody = document.getElementById('sidebarFlyoutBody');
 const sidebarFlyoutCloseBtn = document.getElementById('sidebarFlyoutCloseBtn');
+const sidebarNotesPanel = document.getElementById('sidebarNotesPanel');
+const sidebarNotesPanelTitle = document.getElementById('sidebarNotesPanelTitle');
+const sidebarNotesPanelBreadcrumb = document.getElementById('sidebarNotesPanelBreadcrumb');
+const sidebarNotesPanelBody = document.getElementById('sidebarNotesPanelBody');
+const sidebarNotesPanelCloseBtn = document.getElementById('sidebarNotesPanelCloseBtn');
 
 let railFlyoutNotebookId = null;
-let railFlyoutExpandedSections = new Set();
 const editorArea = document.getElementById('editorArea');
 const emptyEditor = document.getElementById('emptyEditor');
 const pageTitle = document.getElementById('pageTitle');
@@ -1923,6 +1928,10 @@ function initSidebar() {
     railAdminBtn?.addEventListener('click', () => adminPanelBtn.click());
     railLogoutBtn?.addEventListener('click', () => logoutBtn.click());
     sidebarFlyoutCloseBtn?.addEventListener('click', closeRailFlyout);
+    sidebarNotesPanelCloseBtn?.addEventListener('click', () => {
+        closeNotesPanel();
+        renderTree();
+    });
 
     railNotebooks?.addEventListener('click', handleRailClick);
     sidebarFlyoutBody?.addEventListener('click', handleFlyoutClick);
@@ -1950,6 +1959,8 @@ function setSidebarCollapsed(collapsed) {
         }
     } else {
         closeRailFlyout();
+        syncNotesPanelLayout();
+        renderSidebarNotesPanel();
         requestAnimationFrame(updateTreeActiveSlider);
     }
 }
@@ -2029,11 +2040,11 @@ async function openRailFlyout(notebookId) {
         await loadSectionsForNotebook(notebookId);
     }
 
-    if (state.activePage?.section_id) {
-        railFlyoutExpandedSections.add(String(state.activePage.section_id));
-        if (!state.pagesCache[state.activePage.section_id]) {
-            await loadPagesForSection(state.activePage.section_id);
-        }
+    const activeNotebookId = getActiveNotebookId();
+    if (state.activePage?.section_id && String(activeNotebookId) === id) {
+        await selectSection(state.activePage.section_id, notebookId, { toggle: false, forceOpen: true });
+    } else if (state.selectedSection && String(state.selectedSection.notebookId) !== id) {
+        state.selectedSection = null;
     }
 
     renderRail();
@@ -2049,6 +2060,73 @@ function closeRailFlyout() {
     renderRail();
 }
 
+function syncNotesPanelLayout() {
+    const open = !!state.selectedSection && !dashboardLayout?.classList.contains('sidebar-collapsed');
+    dashboardLayout?.classList.toggle('sidebar-notes-panel-open', open);
+    sidebarNotesPanel?.classList.toggle('hidden', !open);
+}
+
+async function selectSection(sectionId, notebookId, options = {}) {
+    const { toggle = true, forceOpen = false } = options;
+    const secId = Number(sectionId);
+    const nbId = Number(notebookId);
+    const panelOpen = !!state.selectedSection && !dashboardLayout?.classList.contains('sidebar-collapsed');
+
+    if (panelOpen && state.selectedSection && !forceOpen) {
+        const isSame = state.selectedSection.sectionId === secId && state.selectedSection.notebookId === nbId;
+
+        if (isSame && toggle) {
+            closeNotesPanel();
+            renderTree();
+            return;
+        }
+
+        if (!isSame) {
+            closeNotesPanel();
+            renderTree();
+            return;
+        }
+    }
+
+    state.selectedSection = { sectionId: secId, notebookId: nbId };
+    state.activeSection = secId;
+    state.activeNotebook = nbId;
+    state.expanded.root = true;
+    state.expanded.notebooks.add(String(nbId));
+
+    if (!state.sectionsCache[nbId]) {
+        await loadSectionsForNotebook(nbId);
+    }
+    if (!state.pagesCache[secId]) {
+        await loadPagesForSection(secId);
+    }
+
+    syncNotesPanelLayout();
+    renderTree();
+}
+
+function retractNotesPanelIfOpen() {
+    if (!state.selectedSection) return false;
+    closeNotesPanel();
+    return true;
+}
+
+function closeNotesPanel() {
+    state.selectedSection = null;
+    syncNotesPanelLayout();
+}
+
+function getSelectedSectionMeta() {
+    const selected = state.selectedSection;
+    if (!selected) return null;
+
+    const notebook = state.notebooks.find(n => n.id == selected.notebookId);
+    const sections = state.sectionsCache[selected.notebookId] || [];
+    const section = sections.find(s => s.id == selected.sectionId);
+
+    return { selected, notebook, section };
+}
+
 function renderRailFlyout() {
     if (!railFlyoutNotebookId || !sidebarFlyoutBody || !sidebarFlyoutTitle) return;
 
@@ -2058,8 +2136,32 @@ function renderRailFlyout() {
         return;
     }
 
-    sidebarFlyoutTitle.textContent = notebook.name;
     const sections = state.sectionsCache[notebook.id] || [];
+    const selected = state.selectedSection;
+    const showingNotes = selected && String(selected.notebookId) === String(notebook.id);
+
+    if (showingNotes) {
+        const section = sections.find(s => s.id == selected.sectionId);
+        const pages = state.pagesCache[selected.sectionId] || [];
+
+        sidebarFlyoutTitle.textContent = section?.name || 'Subfolder';
+        sidebarFlyoutBody.innerHTML = `
+            <button class="flyout-action flyout-back" type="button" data-action="flyout-back-sections">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>All subfolders</span>
+            </button>
+            <div class="flyout-pages">
+                ${renderSectionNotesList(pages, selected.sectionId, { variant: 'flyout' })}
+            </div>
+            <button class="flyout-action" type="button" data-action="create-page" data-id="${selected.sectionId}">
+                <i class="fa-solid fa-file-circle-plus"></i>
+                <span>New note</span>
+            </button>
+        `;
+        return;
+    }
+
+    sidebarFlyoutTitle.textContent = notebook.name;
 
     if (sections.length === 0) {
         sidebarFlyoutBody.innerHTML = `
@@ -2073,44 +2175,22 @@ function renderRailFlyout() {
     }
 
     sidebarFlyoutBody.innerHTML = sections.map(sec => {
-        const secKey = String(sec.id);
-        const isExpanded = railFlyoutExpandedSections.has(secKey);
-        const pages = state.pagesCache[sec.id] || [];
+        const isSelected = selected?.sectionId == sec.id;
+        const pages = state.pagesCache[sec.id];
+        const countLabel = Array.isArray(pages) ? `<span class="tree-label-count">${pages.length}</span>` : '';
 
         return `
-            <div class="flyout-section" data-section-id="${sec.id}">
-                <button
-                    class="flyout-section-header"
-                    type="button"
-                    data-action="toggle-flyout-section"
-                    data-id="${sec.id}"
-                >
-                    <i class="fa-solid fa-folder-tree"></i>
-                    <span>${escapeHtml(sec.name)}</span>
-                    <i class="fa-solid fa-chevron-${isExpanded ? 'down' : 'right'} flyout-chevron"></i>
-                </button>
-                ${isExpanded ? `
-                    <div class="flyout-pages">
-                        ${pages.length === 0
-                            ? '<div class="flyout-empty">No notes</div>'
-                            : pages.map(p => `
-                                <button
-                                    class="flyout-page ${state.activePage?.id == p.id ? 'is-active' : ''}"
-                                    type="button"
-                                    data-action="open-page"
-                                    data-id="${p.id}"
-                                >
-                                    <i class="fa-regular fa-file-lines"></i>
-                                    <span>${escapeHtml(p.title || 'Untitled')}</span>
-                                </button>
-                            `).join('')}
-                        <button class="flyout-action" type="button" data-action="create-page" data-id="${sec.id}">
-                            <i class="fa-solid fa-file-circle-plus"></i>
-                            <span>New note</span>
-                        </button>
-                    </div>
-                ` : ''}
-            </div>
+            <button
+                class="flyout-section-header ${isSelected ? 'is-selected' : ''}"
+                type="button"
+                data-action="select-flyout-section"
+                data-id="${sec.id}"
+                data-notebook-id="${notebook.id}"
+            >
+                <i class="fa-solid fa-folder-tree"></i>
+                <span>${escapeHtml(sec.name)}</span>${countLabel}
+                <i class="fa-solid fa-chevron-right flyout-chevron"></i>
+            </button>
         `;
     }).join('') + `
         <button class="flyout-action" type="button" data-action="create-section" data-id="${notebook.id}">
@@ -2128,8 +2208,13 @@ async function handleFlyoutClick(e) {
     const id = actionEl.dataset.id;
 
     switch (action) {
-        case 'toggle-flyout-section':
-            await toggleFlyoutSection(id);
+        case 'select-flyout-section':
+            await selectSection(id, actionEl.dataset.notebookId, { toggle: false, forceOpen: true });
+            renderRailFlyout();
+            break;
+        case 'flyout-back-sections':
+            closeNotesPanel();
+            renderRailFlyout();
             break;
         case 'open-page':
             if (e.target.closest('.flyout-page span')) {
@@ -2157,22 +2242,11 @@ async function handleFlyoutClick(e) {
     }
 }
 
-async function toggleFlyoutSection(sectionId) {
-    const key = String(sectionId);
-    if (railFlyoutExpandedSections.has(key)) {
-        railFlyoutExpandedSections.delete(key);
-    } else {
-        railFlyoutExpandedSections.add(key);
-        if (!state.pagesCache[sectionId]) {
-            await loadPagesForSection(sectionId);
-        }
-    }
-    renderRailFlyout();
-}
-
 function initTreeEvents() {
     treeView.addEventListener('click', handleTreeClick);
+    sidebarNotesPanelBody?.addEventListener('click', handleTreeClick);
     treeView.addEventListener('dblclick', handleTreeLabelDblClick);
+    sidebarNotesPanelBody?.addEventListener('dblclick', handleTreeLabelDblClick);
     treeView.addEventListener('scroll', () => {
         updateTreeActiveSlider();
         hideTreeContextMenu();
@@ -2219,6 +2293,19 @@ function initTreeDragDrop() {
     if (treeScrollArea) {
         treeScrollArea.addEventListener('dragover', onDragOver);
         treeScrollArea.addEventListener('drop', onDrop);
+    }
+
+    if (sidebarNotesPanelBody) {
+        sidebarNotesPanelBody.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.tree-drag-handle')) {
+                e.stopPropagation();
+            }
+        }, true);
+        sidebarNotesPanelBody.addEventListener('dragstart', handleTreeDragStart);
+        sidebarNotesPanelBody.addEventListener('dragend', handleTreeDragEnd);
+        sidebarNotesPanelBody.addEventListener('dragover', onDragOver);
+        sidebarNotesPanelBody.addEventListener('dragleave', handleTreeDragLeave);
+        sidebarNotesPanelBody.addEventListener('drop', onDrop);
     }
 }
 
@@ -2323,7 +2410,10 @@ function resolveTreeDrop(e) {
                 scheduleNotebookExpandDuringDrag(parseInt(row.dataset.treeId, 10));
             }
             if (treeDragSource.type === 'page' && row.dataset.treeType === 'section') {
-                scheduleSectionExpandDuringDrag(parseInt(row.dataset.treeId, 10));
+                scheduleSectionSelectDuringDrag(
+                    parseInt(row.dataset.treeId, 10),
+                    parseInt(row.dataset.treeNotebookId, 10)
+                );
             }
             return {
                 action,
@@ -2333,27 +2423,6 @@ function resolveTreeDrop(e) {
     }
 
     if (treeDragSource.type === 'page') {
-        const empty = e.target.closest('.tree-children[data-context-section-id] .tree-empty');
-        if (empty) {
-            const children = empty.closest('.tree-children[data-context-section-id]');
-            const sectionId = parseInt(children.dataset.contextSectionId, 10);
-            scheduleSectionExpandDuringDrag(sectionId);
-            return {
-                action: { target_type: 'section', target_id: sectionId, position: 'inside' },
-                indicator: { kind: 'container', el: children }
-            };
-        }
-
-        const children = e.target.closest('.tree-children[data-context-section-id]');
-        if (children && !e.target.closest('.tree-row[data-tree-type="page"]')) {
-            const sectionId = parseInt(children.dataset.contextSectionId, 10);
-            scheduleSectionExpandDuringDrag(sectionId);
-            return {
-                action: { target_type: 'section', target_id: sectionId, position: 'inside' },
-                indicator: { kind: 'container', el: children }
-            };
-        }
-
         const notebookEmpty = e.target.closest('.tree-children[data-context-notebook-id] .tree-empty');
         if (notebookEmpty) {
             const children = notebookEmpty.closest('.tree-children[data-context-notebook-id]');
@@ -2418,19 +2487,20 @@ function scheduleNotebookExpandDuringDrag(notebookId) {
     }, 650);
 }
 
-function scheduleSectionExpandDuringDrag(sectionId) {
+function scheduleSectionSelectDuringDrag(sectionId, notebookId) {
     if (treeDragSource?.type !== 'page') return;
 
-    const key = String(sectionId);
-    if (state.expanded.sections.has(key)) return;
+    const secId = Number(sectionId);
+    const nbId = Number(notebookId);
+    if (state.selectedSection?.sectionId === secId && state.selectedSection?.notebookId === nbId) return;
 
     clearTreeDragExpandTimer();
     treeDragExpandTimer = setTimeout(async () => {
         treeDragExpandTimer = null;
         if (!treeDragSource) return;
-        state.expanded.sections.add(key);
-        if (!state.pagesCache[sectionId]) {
-            await loadPagesForSection(sectionId);
+        state.selectedSection = { sectionId: secId, notebookId: nbId };
+        if (!state.pagesCache[secId]) {
+            await loadPagesForSection(secId);
         }
         treeDragNeedsRender = true;
     }, 650);
@@ -2444,7 +2514,7 @@ function clearTreeDragExpandTimer() {
 }
 
 function clearTreeDropIndicators() {
-    treeView.querySelectorAll('.tree-drop-before, .tree-drop-after, .tree-drop-inside, .tree-drop-needs-subfolder').forEach(el => {
+    document.querySelectorAll('.tree-drop-before, .tree-drop-after, .tree-drop-inside, .tree-drop-needs-subfolder').forEach(el => {
         el.classList.remove('tree-drop-before', 'tree-drop-after', 'tree-drop-inside', 'tree-drop-needs-subfolder');
     });
     treeDropIndicator = null;
@@ -2478,7 +2548,9 @@ function setTreeDropIndicator(indicator) {
 function handleTreeDragOver(e) {
     if (!treeDragSource) return;
 
-    const inTree = treeView.contains(e.target) || treeScrollArea?.contains(e.target);
+    const inTree = treeView.contains(e.target)
+        || treeScrollArea?.contains(e.target)
+        || sidebarNotesPanelBody?.contains(e.target);
     if (!inTree) return;
 
     const resolved = resolveTreeDrop(e);
@@ -2497,7 +2569,10 @@ function handleTreeDragOver(e) {
 
 function handleTreeDragLeave(e) {
     const related = e.relatedTarget;
-    if (related && (treeView.contains(related) || treeScrollArea?.contains(related))) return;
+    if (
+        related
+        && (treeView.contains(related) || treeScrollArea?.contains(related) || sidebarNotesPanelBody?.contains(related))
+    ) return;
     clearTreeDropIndicators();
     clearTreeDragExpandTimer();
 }
@@ -2606,7 +2681,7 @@ async function handlePageDropNeedsSubfolder(notebookId, pageId) {
 }
 
 function handleTreeDragEnd() {
-    treeView.querySelectorAll('.tree-row.tree-dragging').forEach(el => el.classList.remove('tree-dragging'));
+    document.querySelectorAll('.tree-row.tree-dragging').forEach(el => el.classList.remove('tree-dragging'));
     treeDragSource = null;
     clearTreeDropIndicators();
     clearTreeDragExpandTimer();
@@ -2644,11 +2719,11 @@ async function performTreeMove(payload) {
         if (payload.target_type === 'notebook') {
             state.expanded.notebooks.add(String(payload.target_id));
         } else if (payload.target_type === 'section') {
-            state.expanded.sections.add(String(payload.target_id));
             for (const nb of state.notebooks) {
                 const sections = state.sectionsCache[nb.id] || [];
                 if (sections.some(sec => sec.id == payload.target_id)) {
                     state.expanded.notebooks.add(String(nb.id));
+                    state.selectedSection = { sectionId: payload.target_id, notebookId: nb.id };
                     break;
                 }
             }
@@ -2662,11 +2737,14 @@ async function performTreeMove(payload) {
             state.activeNotebook = data.new_notebook_id;
         }
         if (payload.target_type === 'section') {
-            state.expanded.sections.add(String(payload.target_id));
             for (const nb of state.notebooks) {
                 const sections = state.sectionsCache[nb.id] || [];
                 if (sections.some(sec => sec.id == payload.target_id || sec.id == payload.id)) {
                     state.expanded.notebooks.add(String(nb.id));
+                }
+                if (sections.some(sec => sec.id == payload.target_id)) {
+                    state.selectedSection = { sectionId: payload.target_id, notebookId: nb.id };
+                    break;
                 }
             }
         }
@@ -2687,13 +2765,13 @@ async function performTreeMove(payload) {
         }
 
         if (targetSectionId) {
-            state.expanded.sections.add(String(targetSectionId));
             state.activeSection = targetSectionId;
             for (const nb of state.notebooks) {
                 const sections = state.sectionsCache[nb.id] || [];
                 if (sections.some(sec => sec.id == targetSectionId)) {
                     state.expanded.notebooks.add(String(nb.id));
                     state.activeNotebook = nb.id;
+                    state.selectedSection = { sectionId: targetSectionId, notebookId: nb.id };
                     break;
                 }
             }
@@ -2717,6 +2795,7 @@ function initTreeContextMenu() {
 
     treeContextMenu.addEventListener('click', handleTreeContextMenuClick);
     treeScrollArea?.addEventListener('contextmenu', handleTreeContextMenu);
+    sidebarNotesPanelBody?.addEventListener('contextmenu', handleTreeContextMenu);
     sidebarFlyout?.addEventListener('contextmenu', handleFlyoutContextMenu);
 
     document.addEventListener('click', (e) => {
@@ -2848,6 +2927,19 @@ function buildTreeContextMenuItems(target) {
 }
 
 function resolveTreeContextTarget(e) {
+    const panelRow = e.target.closest('#sidebarNotesPanelBody .tree-row[data-tree-type="page"]');
+    if (panelRow) {
+        return {
+            type: 'page',
+            id: panelRow.dataset.treeId,
+            sectionId: panelRow.dataset.treeSectionId
+        };
+    }
+
+    if (e.target.closest('#sidebarNotesPanelBody .notes-panel-empty') && state.selectedSection) {
+        return { type: 'section-empty', id: state.selectedSection.sectionId };
+    }
+
     const row = e.target.closest('.tree-row');
     if (row) {
         if (row.classList.contains('tree-row-root') || row.dataset.treeType === 'root') {
@@ -2874,9 +2966,9 @@ function resolveTreeContextTarget(e) {
             return { type: 'section', id: createPageBtn.dataset.id };
         }
         if (row.dataset.action === 'open-page') {
-            const sectionEl = row.closest('.tree-children[data-context-section-id]');
-            if (sectionEl) {
-                return { type: 'page', id: row.dataset.id, sectionId: sectionEl.dataset.contextSectionId };
+            const sectionId = row.dataset.treeSectionId || state.selectedSection?.sectionId;
+            if (sectionId) {
+                return { type: 'page', id: row.dataset.id, sectionId };
             }
         }
     }
@@ -2904,7 +2996,7 @@ function resolveTreeContextTarget(e) {
         return { type: 'root' };
     }
 
-    if (e.target.closest('#treeView') || e.target.closest('.tree-scroll-area')) {
+    if (e.target.closest('#treeView') || e.target.closest('.tree-scroll-area') || e.target.closest('#sidebarNotesPanelBody')) {
         return { type: 'root' };
     }
 
@@ -2930,7 +3022,7 @@ function resolveFlyoutContextTarget(e) {
 
     const page = e.target.closest('.flyout-page');
     if (page) {
-        const sectionId = page.closest('.flyout-section')?.dataset.sectionId;
+        const sectionId = state.selectedSection?.sectionId;
         return page.dataset.id && sectionId
             ? { type: 'page', id: page.dataset.id, sectionId }
             : null;
@@ -2942,9 +3034,8 @@ function resolveFlyoutContextTarget(e) {
     }
 
     const empty = e.target.closest('.flyout-empty');
-    if (empty) {
-        const sectionId = empty.closest('.flyout-section')?.dataset.sectionId;
-        if (sectionId) return { type: 'section-empty', id: sectionId };
+    if (empty && state.selectedSection) {
+        return { type: 'section-empty', id: state.selectedSection.sectionId };
     }
 
     if (e.target.closest('#sidebarFlyoutBody') || e.target.closest('.sidebar-flyout-header')) {
@@ -3021,13 +3112,15 @@ function updateTreeActiveSlider() {
     if (!treeActiveSlider || !treeScrollArea) return;
 
     const activeRow = treeView.querySelector('.tree-row.active:not(.tree-row-root)');
-    if (!activeRow) {
+    const selectedRow = treeView.querySelector('.tree-row.is-selected');
+    const highlightRow = activeRow || selectedRow;
+    if (!highlightRow) {
         treeActiveSlider.classList.remove('is-visible');
         return;
     }
 
     const areaRect = treeScrollArea.getBoundingClientRect();
-    const rowRect = activeRow.getBoundingClientRect();
+    const rowRect = highlightRow.getBoundingClientRect();
     const top = rowRect.top - areaRect.top;
     const height = rowRect.height;
 
@@ -3037,14 +3130,32 @@ function updateTreeActiveSlider() {
 }
 
 function scrollActiveTreeRowIntoView() {
-    const activeRow = treeView.querySelector('.tree-row.active:not(.tree-row-root)');
-    if (activeRow) {
-        activeRow.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    const selectedRow = state.selectedSection
+        ? treeView.querySelector(`.tree-row[data-tree-type="section"][data-tree-id="${state.selectedSection.sectionId}"]`)
+        : null;
+    selectedRow?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+
+    const activeNote = sidebarNotesPanelBody?.querySelector('.tree-row.active');
+    activeNote?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+
+    const activeStarred = treeView.querySelector('.tree-row.active:not(.tree-row-root)');
+    if (!selectedRow && activeStarred) {
+        activeStarred.scrollIntoView({ block: 'nearest', behavior: 'auto' });
     }
+
     updateTreeActiveSlider();
 }
 
-function handleTreeClick(e) {
+async function handleTreeClick(e) {
+    const notebookRow = e.target.closest('.tree-row[data-tree-type="notebook"]');
+    if (
+        notebookRow
+        && !e.target.closest('.tree-action, .tree-toggle, .tree-drag-handle')
+        && retractNotesPanelIfOpen()
+    ) {
+        renderTree();
+    }
+
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
 
@@ -3054,19 +3165,24 @@ function handleTreeClick(e) {
 
     switch (action) {
         case 'toggle-starred':
+            retractNotesPanelIfOpen();
             state.expanded.starred = state.expanded.starred === false;
             renderTree();
             break;
         case 'toggle-root':
+            retractNotesPanelIfOpen();
             state.expanded.root = !state.expanded.root;
             renderTree();
             break;
         case 'toggle-notebook':
             toggleNotebook(id);
             break;
-        case 'toggle-section':
-            toggleSection(id);
+        case 'select-section': {
+            const row = actionEl.closest('.tree-row');
+            const notebookId = row?.dataset.treeNotebookId || id;
+            await selectSection(id, notebookId);
             break;
+        }
         case 'create-notebook':
             createNotebook();
             break;
@@ -3139,7 +3255,7 @@ function handleFlyoutLabelDblClick(e) {
             type: 'page',
             id: pageBtn.dataset.id,
             value: label.textContent,
-            sectionId: pageBtn.closest('.flyout-section')?.dataset.sectionId || null,
+            sectionId: state.selectedSection?.sectionId || null,
             inputClass: 'flyout-label-input'
         });
         return;
@@ -3163,7 +3279,8 @@ function handleFlyoutLabelDblClick(e) {
 }
 
 function triggerTreeItemRename(type, id, sectionId = null) {
-    const row = treeView?.querySelector(`.tree-row[data-tree-type="${type}"][data-tree-id="${id}"]`);
+    const row = treeView?.querySelector(`.tree-row[data-tree-type="${type}"][data-tree-id="${id}"]`)
+        || sidebarNotesPanelBody?.querySelector(`.tree-row[data-tree-type="${type}"][data-tree-id="${id}"]`);
     if (row) {
         const label = row.querySelector('.tree-label');
         if (label) {
@@ -3187,7 +3304,7 @@ function triggerTreeItemRename(type, id, sectionId = null) {
                 type,
                 id,
                 value: label.textContent,
-                sectionId: sectionId || pageBtn.closest('.flyout-section')?.dataset.sectionId || null,
+                sectionId: sectionId || state.selectedSection?.sectionId || null,
                 inputClass: 'flyout-label-input'
             });
             return;
@@ -3262,7 +3379,10 @@ async function duplicatePage(pageId, sectionId) {
         }
     }
 
-    state.expanded.sections.add(String(resolvedSectionId));
+    const notebookId = findNotebookIdForSection(resolvedSectionId);
+    if (notebookId) {
+        state.selectedSection = { sectionId: resolvedSectionId, notebookId };
+    }
     if (railFlyoutNotebookId) renderRailFlyout();
     await openPage(data.id);
 }
@@ -3785,6 +3905,7 @@ logoutBtn.onclick = async () => {
         userId: null, role: null, email: null, notebooks: [],
         sectionsCache: {}, pagesCache: {},
         expanded: { root: true, starred: true, notebooks: new Set(), sections: new Set() },
+        selectedSection: null,
         activeNotebook: null, activeSection: null, activePage: null,
         starredPages: [],
         hasAiKey: false,
@@ -3794,6 +3915,8 @@ logoutBtn.onclick = async () => {
     adminPanelBtn.classList.add('hidden');
     syncRailAdminVisibility();
     closeRailFlyout();
+    closeNotesPanel();
+    dashboardLayout?.classList.remove('sidebar-notes-panel-open');
     showAuth();
     await fetchCsrfToken();
 };
@@ -3841,6 +3964,7 @@ async function loadPagesForSection(sectionId) {
 }
 
 async function toggleNotebook(notebookId) {
+    retractNotesPanelIfOpen();
     const key = String(notebookId);
     if (state.expanded.notebooks.has(key)) {
         state.expanded.notebooks.delete(key);
@@ -3848,19 +3972,6 @@ async function toggleNotebook(notebookId) {
         state.expanded.notebooks.add(key);
         if (!state.sectionsCache[notebookId]) {
             await loadSectionsForNotebook(notebookId);
-        }
-    }
-    renderTree();
-}
-
-async function toggleSection(sectionId) {
-    const key = String(sectionId);
-    if (state.expanded.sections.has(key)) {
-        state.expanded.sections.delete(key);
-    } else {
-        state.expanded.sections.add(key);
-        if (!state.pagesCache[sectionId]) {
-            await loadPagesForSection(sectionId);
         }
     }
     renderTree();
@@ -3883,13 +3994,14 @@ async function expandPathToPage(page) {
 
     if (notebookId) {
         state.expanded.notebooks.add(String(notebookId));
+        state.selectedSection = { sectionId: page.section_id, notebookId };
     }
-
-    state.expanded.sections.add(String(page.section_id));
 
     if (!state.pagesCache[page.section_id]) {
         await loadPagesForSection(page.section_id);
     }
+
+    syncNotesPanelLayout();
 }
 
 async function openPage(pageId, options = {}) {
@@ -4004,6 +4116,8 @@ function renderTree() {
             }
         });
     }
+
+    renderSidebarNotesPanel();
 }
 
 function renderStarredPagesTree(pages) {
@@ -4091,19 +4205,25 @@ function renderSectionsTree(sections, notebookId) {
     }
 
     return sections.map(sec => {
-        const secKey = String(sec.id);
-        const isExpanded = state.expanded.sections.has(secKey);
-        const pages = state.pagesCache[sec.id] || [];
+        const isSelected = state.selectedSection?.sectionId == sec.id;
+        const pages = state.pagesCache[sec.id];
+        const countLabel = Array.isArray(pages) ? `<span class="tree-label-count">${pages.length}</span>` : '';
 
         return `
             <div class="tree-node">
-                <div class="tree-row" style="--tree-depth: 2" data-tree-type="section" data-tree-id="${sec.id}" data-tree-notebook-id="${notebookId}">
+                <div
+                    class="tree-row ${isSelected ? 'is-selected' : ''}"
+                    style="--tree-depth: 2"
+                    data-tree-type="section"
+                    data-tree-id="${sec.id}"
+                    data-tree-notebook-id="${notebookId}"
+                    data-action="select-section"
+                    data-id="${sec.id}"
+                >
                     <span class="tree-drag-handle" draggable="true" title="Drag to reorder or move to another folder" aria-label="Drag to reorder or move to another folder"><i class="fa-solid fa-grip-vertical"></i></span>
-                    <button class="tree-toggle" data-action="toggle-section" data-id="${sec.id}" aria-label="Toggle subfolder">
-                        <i class="fa-solid fa-chevron-${isExpanded ? 'down' : 'right'}"></i>
-                    </button>
+                    <span class="tree-toggle-spacer"></span>
                     <i class="fa-solid fa-folder-tree tree-icon"></i>
-                    <span class="tree-label">${escapeHtml(sec.name)}</span>
+                    <span class="tree-label">${escapeHtml(sec.name)}</span>${countLabel}
                     <div class="tree-actions">
                         <button class="tree-action tree-action-add" data-action="create-page" data-id="${sec.id}" title="New note">
                             <i class="fa-solid fa-file-circle-plus"></i>
@@ -4113,15 +4233,35 @@ function renderSectionsTree(sections, notebookId) {
                         </button>
                     </div>
                 </div>
-                ${isExpanded ? `<div class="tree-children" data-context-section-id="${sec.id}">${renderPagesTree(pages, sec.id)}</div>` : ''}
             </div>
         `;
     }).join('');
 }
 
-function renderPagesTree(pages, sectionId) {
+function renderSectionNotesList(pages, sectionId, options = {}) {
+    const { variant = 'panel' } = options;
+
     if (pages.length === 0) {
-        return '<div class="tree-empty" style="--tree-empty-depth: 3">No notes</div>';
+        return variant === 'flyout'
+            ? '<div class="flyout-empty">No notes</div>'
+            : '<div class="notes-panel-empty">No notes yet</div>';
+    }
+
+    if (variant === 'flyout') {
+        return pages.map(p => {
+            const isActive = state.activePage && state.activePage.id == p.id;
+            return `
+                <button
+                    class="flyout-page ${isActive ? 'is-active' : ''}"
+                    type="button"
+                    data-action="open-page"
+                    data-id="${p.id}"
+                >
+                    <i class="fa-regular fa-file-lines"></i>
+                    <span>${escapeHtml(p.title || 'Untitled')}</span>
+                </button>
+            `;
+        }).join('');
     }
 
     return pages.map(p => {
@@ -4129,7 +4269,7 @@ function renderPagesTree(pages, sectionId) {
 
         return `
             <div class="tree-node">
-                <div class="tree-row ${isActive ? 'active' : ''}" style="--tree-depth: 3" data-tree-type="page" data-tree-id="${p.id}" data-tree-section-id="${sectionId}" data-action="open-page" data-id="${p.id}">
+                <div class="tree-row ${isActive ? 'active' : ''}" style="--tree-depth: 0" data-tree-type="page" data-tree-id="${p.id}" data-tree-section-id="${sectionId}" data-action="open-page" data-id="${p.id}">
                     <span class="tree-drag-handle" draggable="true" title="Drag to reorder or move to another subfolder" aria-label="Drag to reorder or move to another subfolder"><i class="fa-solid fa-grip-vertical"></i></span>
                     <span class="tree-toggle-spacer"></span>
                     <i class="fa-regular fa-file-lines tree-icon"></i>
@@ -4144,6 +4284,42 @@ function renderPagesTree(pages, sectionId) {
             </div>
         `;
     }).join('');
+}
+
+function renderSidebarNotesPanel() {
+    if (!sidebarNotesPanel || !sidebarNotesPanelBody) return;
+
+    const meta = getSelectedSectionMeta();
+    syncNotesPanelLayout();
+
+    if (!meta) {
+        sidebarNotesPanelTitle.textContent = '';
+        sidebarNotesPanelBreadcrumb.textContent = '';
+        sidebarNotesPanelBody.innerHTML = '';
+        return;
+    }
+
+    const { selected, notebook, section } = meta;
+    const pages = state.pagesCache[selected.sectionId] || [];
+
+    sidebarNotesPanelTitle.textContent = section?.name || 'Subfolder';
+    sidebarNotesPanelBreadcrumb.textContent = notebook
+        ? `${notebook.name} / ${section?.name || 'Subfolder'}`
+        : '';
+
+    sidebarNotesPanelBody.innerHTML = `
+        <div class="notes-panel-list">
+            ${renderSectionNotesList(pages, selected.sectionId)}
+        </div>
+        <div class="notes-panel-footer">
+            <button class="notes-panel-new-btn" type="button" data-action="create-page" data-id="${selected.sectionId}">
+                <span class="notes-panel-new-btn-icon" aria-hidden="true">
+                    <i class="fa-solid fa-plus"></i>
+                </span>
+                <span class="notes-panel-new-btn-label">New note</span>
+            </button>
+        </div>
+    `;
 }
 
 function escapeHtml(text) {
@@ -4200,10 +4376,10 @@ async function createSectionWithName(notebookId, name) {
     state.sectionsCache[notebookId].push(data);
     state.expanded.root = true;
     state.expanded.notebooks.add(String(notebookId));
-    state.expanded.sections.add(String(data.id));
     state.pagesCache[data.id] = [];
     state.activeNotebook = notebookId;
     state.activeSection = data.id;
+    state.selectedSection = { sectionId: data.id, notebookId };
     return data.id;
 }
 
@@ -4218,8 +4394,11 @@ async function createPage(sectionId) {
         state.pagesCache[sectionId] = [];
     }
     state.pagesCache[sectionId].unshift({ ...data, title, updated_at: new Date().toISOString() });
-    state.expanded.sections.add(String(sectionId));
+    const notebookId = findNotebookIdForSection(sectionId);
     state.activeSection = sectionId;
+    if (notebookId) {
+        state.selectedSection = { sectionId, notebookId };
+    }
     await openPage(data.id);
 }
 
@@ -4245,7 +4424,12 @@ async function deleteItem(type, id, e) {
         if (state.activeNotebook == id) {
             state.activeNotebook = null;
             state.activeSection = null;
+            state.selectedSection = null;
             hideEditor();
+        }
+        if (state.selectedSection?.notebookId == id) {
+            state.selectedSection = null;
+            syncNotesPanelLayout();
         }
     }
     if (type === 'section') {
@@ -4254,6 +4438,10 @@ async function deleteItem(type, id, e) {
         }
         delete state.pagesCache[id];
         state.expanded.sections.delete(String(id));
+        if (state.selectedSection?.sectionId == id) {
+            state.selectedSection = null;
+            syncNotesPanelLayout();
+        }
         if (state.activeSection == id) {
             state.activeSection = null;
             hideEditor();

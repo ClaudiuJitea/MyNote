@@ -88,47 +88,63 @@
 
                 <!-- Full sidebar panel -->
                 <div class="sidebar-panel">
-                <div class="sidebar-header">
-                    <div class="sidebar-brand">
-                        <span class="sidebar-brand-icon"><i class="fa-solid fa-book-open"></i></span>
-                        <span class="sidebar-brand-name">MyNotes</span>
+                <div class="sidebar-panel-body">
+                    <div class="sidebar-main-column">
+                        <div class="sidebar-header">
+                            <div class="sidebar-brand">
+                                <span class="sidebar-brand-icon"><i class="fa-solid fa-book-open"></i></span>
+                                <span class="sidebar-brand-name">MyNotes</span>
+                            </div>
+                            <button id="sidebarCollapseBtn" class="sidebar-toggle-btn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
+                                <i class="fa-solid fa-angles-left"></i>
+                            </button>
+                        </div>
+
+                        <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
+
+                        <div class="tree-scroll-area">
+                            <div class="sidebar-section-label">Navigation</div>
+                            <div id="treeActiveSlider" class="tree-active-slider" aria-hidden="true"></div>
+                            <div id="treeView" class="tree-container"></div>
+                        </div>
+
+                        <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
+
+                        <div class="col-footer">
+                            <div class="sidebar-footer-group">
+                                <button id="userPanelBtn" class="footer-btn" type="button">
+                                    <i class="fa-solid fa-user-gear"></i>
+                                    <span>Account</span>
+                                </button>
+                                <button id="adminPanelBtn" class="footer-btn hidden">
+                                    <i class="fa-solid fa-gear"></i>
+                                    <span>Admin Panel</span>
+                                </button>
+                                <button id="themeToggleBtn" class="footer-btn">
+                                    <i class="fa-solid fa-moon theme-icon"></i>
+                                    <span class="theme-label">Dark Mode</span>
+                                </button>
+                            </div>
+                            <div class="sidebar-divider sidebar-divider-inset" role="separator" aria-hidden="true"></div>
+                            <div class="sidebar-footer-group">
+                                <button id="logoutBtn" class="footer-btn footer-btn-logout">
+                                    <i class="fa-solid fa-right-from-bracket"></i>
+                                    <span>Logout</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <button id="sidebarCollapseBtn" class="sidebar-toggle-btn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
-                        <i class="fa-solid fa-angles-left"></i>
-                    </button>
-                </div>
-
-                <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
-
-                <div class="tree-scroll-area">
-                    <div class="sidebar-section-label">Navigation</div>
-                    <div id="treeActiveSlider" class="tree-active-slider" aria-hidden="true"></div>
-                    <div id="treeView" class="tree-container"></div>
-                </div>
-
-                <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
-
-                <div class="col-footer">
-                    <div class="sidebar-footer-group">
-                        <button id="userPanelBtn" class="footer-btn" type="button">
-                            <i class="fa-solid fa-user-gear"></i>
-                            <span>Account</span>
-                        </button>
-                        <button id="adminPanelBtn" class="footer-btn hidden">
-                            <i class="fa-solid fa-gear"></i>
-                            <span>Admin Panel</span>
-                        </button>
-                        <button id="themeToggleBtn" class="footer-btn">
-                            <i class="fa-solid fa-moon theme-icon"></i>
-                            <span class="theme-label">Dark Mode</span>
-                        </button>
-                    </div>
-                    <div class="sidebar-divider sidebar-divider-inset" role="separator" aria-hidden="true"></div>
-                    <div class="sidebar-footer-group">
-                        <button id="logoutBtn" class="footer-btn footer-btn-logout">
-                            <i class="fa-solid fa-right-from-bracket"></i>
-                            <span>Logout</span>
-                        </button>
+                    <div id="sidebarNotesPanel" class="sidebar-notes-panel hidden" aria-label="Subfolder notes">
+                        <div class="sidebar-notes-panel-header">
+                            <div class="sidebar-notes-panel-heading">
+                                <h2 id="sidebarNotesPanelTitle" class="sidebar-notes-panel-title"></h2>
+                                <p id="sidebarNotesPanelBreadcrumb" class="sidebar-notes-panel-breadcrumb"></p>
+                            </div>
+                            <button id="sidebarNotesPanelCloseBtn" class="sidebar-notes-panel-close" type="button" aria-label="Close notes panel">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <div id="sidebarNotesPanelBody" class="sidebar-notes-panel-body"></div>
                     </div>
                 </div>
                 </div>
