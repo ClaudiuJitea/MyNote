@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyNotes</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=14">
+</head>
+<body class="light">
+
+    <!-- Auth View -->
+    <div id="authView" class="view-container">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <i class="fa-solid fa-book-open"></i>
+            </div>
+            <h1 id="authTitle" class="auth-title">Login to MyNotes</h1>
+            <p id="authSubtitle" class="auth-subtitle">Welcome back!</p>
+            <div id="authError" class="error-msg hidden"></div>
+
+            <form id="authForm">
+                <input type="email" id="email" placeholder="Email" required>
+                <input type="password" id="password" placeholder="Password" required>
+                <button type="submit" id="authBtn" class="btn btn-primary">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboardView" class="view-container hidden">
+        <div id="dashboardLayout" class="dashboard-layout">
+
+            <!-- Sidebar: Tree navigation -->
+            <aside id="sidebar" class="sidebar">
+                <!-- Icon rail (visible when collapsed) -->
+                <nav class="sidebar-rail" aria-label="Quick navigation">
+                    <button id="sidebarExpandBtn" class="rail-btn" type="button" data-tooltip="Expand sidebar" aria-label="Expand sidebar">
+                        <i class="fa-solid fa-angles-right"></i>
+                    </button>
+
+                    <div class="rail-divider" role="separator" aria-hidden="true"></div>
+
+                    <button class="rail-btn rail-btn-brand" type="button" data-tooltip="MyNotes" aria-label="MyNotes">
+                        <i class="fa-solid fa-book-open"></i>
+                    </button>
+
+                    <div id="railNotebooks" class="rail-notebooks"></div>
+
+                    <button id="railNewNotebookBtn" class="rail-btn rail-btn-accent" type="button" data-tooltip="New folder" aria-label="New folder">
+                        <i class="fa-solid fa-folder-plus"></i>
+                    </button>
+
+                    <button id="railActiveNoteBtn" class="rail-btn hidden" type="button" data-tooltip="Current note" aria-label="Current note">
+                        <i class="fa-regular fa-file-lines"></i>
+                    </button>
+
+                    <div class="rail-spacer"></div>
+
+                    <div class="rail-divider" role="separator" aria-hidden="true"></div>
+
+                    <button id="railThemeBtn" class="rail-btn" type="button" data-tooltip="Toggle theme" aria-label="Toggle theme">
+                        <i class="fa-solid fa-moon rail-theme-icon"></i>
+                    </button>
+                    <button id="railAdminBtn" class="rail-btn hidden" type="button" data-tooltip="Admin Panel" aria-label="Admin Panel">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                    <button id="railLogoutBtn" class="rail-btn rail-btn-logout" type="button" data-tooltip="Logout" aria-label="Logout">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </nav>
+
+                <!-- Flyout panel (notebook nav when collapsed) -->
+                <div id="sidebarFlyout" class="sidebar-flyout hidden" aria-label="Folder navigation">
+                    <div class="sidebar-flyout-header">
+                        <h2 id="sidebarFlyoutTitle" class="sidebar-flyout-title"></h2>
+                        <button id="sidebarFlyoutCloseBtn" class="sidebar-flyout-close" type="button" aria-label="Close panel">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div id="sidebarFlyoutBody" class="sidebar-flyout-body"></div>
+                </div>
+
+                <!-- Full sidebar panel -->
+                <div class="sidebar-panel">
+                <div class="sidebar-header">
+                    <div class="sidebar-brand">
+                        <span class="sidebar-brand-icon"><i class="fa-solid fa-book-open"></i></span>
+                        <span class="sidebar-brand-name">MyNotes</span>
+                    </div>
+                    <button id="sidebarCollapseBtn" class="sidebar-toggle-btn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
+                        <i class="fa-solid fa-angles-left"></i>
+                    </button>
+                </div>
+
+                <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
+
+                <div class="tree-scroll-area">
+                    <div class="sidebar-section-label">Navigation</div>
+                    <div id="treeActiveSlider" class="tree-active-slider" aria-hidden="true"></div>
+                    <div id="treeView" class="tree-container"></div>
+                </div>
+
+                <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
+
+                <div class="col-footer">
+                    <div class="sidebar-footer-group">
+                        <button id="userPanelBtn" class="footer-btn" type="button">
+                            <i class="fa-solid fa-user-gear"></i>
+                            <span>Account</span>
+                        </button>
+                        <button id="adminPanelBtn" class="footer-btn hidden">
+                            <i class="fa-solid fa-gear"></i>
+                            <span>Admin Panel</span>
+                        </button>
+                        <button id="themeToggleBtn" class="footer-btn">
+                            <i class="fa-solid fa-moon theme-icon"></i>
+                            <span class="theme-label">Dark Mode</span>
+                        </button>
+                    </div>
+                    <div class="sidebar-divider sidebar-divider-inset" role="separator" aria-hidden="true"></div>
+                    <div class="sidebar-footer-group">
+                        <button id="logoutBtn" class="footer-btn footer-btn-logout">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                            <span>Logout</span>
+                        </button>
+                    </div>
+                </div>
+                </div>
+            </aside>
+
+            <!-- Editor -->
+            <main class="col-editor">
+                <div class="top-bar">
+                    <button id="homeBtn" class="top-bar-home-btn" type="button" aria-label="Home" title="Home">
+                        <i class="fa-solid fa-house"></i>
+                    </button>
+                    <div class="search-container">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="text" id="searchInput" placeholder="Search all notes…" autocomplete="off">
+                        <button type="button" id="searchClearBtn" class="search-clear-btn hidden" aria-label="Clear search">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                        <div id="searchResults" class="search-results hidden"></div>
+                    </div>
+                    <div class="top-bar-meta">
+                        <span id="editorMeta" class="editor-meta hidden"></span>
+                        <span id="saveStatus" class="save-status" data-state="saved">
+                            <i class="fa-solid fa-check"></i>
+                            <span class="save-status-label">Saved</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div id="editorArea" class="editor-area hidden">
+                    <div class="editor-scroll">
+                        <article class="editor-sheet">
+                            <header class="editor-header">
+                                <nav id="editorBreadcrumb" class="editor-breadcrumb" aria-label="Note location"></nav>
+                                <input type="text" id="pageTitle" placeholder="Untitled" class="page-title-input">
+                                <div class="editor-actions" aria-label="Editor tools">
+                                    <button type="button" id="editorUndoBtn" class="editor-action-btn" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
+                                        <i class="fa-solid fa-rotate-left"></i>
+                                    </button>
+                                    <button type="button" id="editorRedoBtn" class="editor-action-btn" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>
+                                        <i class="fa-solid fa-rotate-right"></i>
+                                    </button>
+                                    <span class="editor-actions-divider" aria-hidden="true"></span>
+                                    <button type="button" id="editorTocBtn" class="editor-action-btn" aria-label="Table of contents" title="Table of contents" aria-pressed="false">
+                                        <i class="fa-solid fa-list-ul"></i>
+                                        <span class="editor-action-label">Contents</span>
+                                    </button>
+                                    <button type="button" id="editorFocusBtn" class="editor-action-btn" aria-label="Focus mode" title="Focus mode" aria-pressed="false">
+                                        <i class="fa-solid fa-expand"></i>
+                                        <span class="editor-action-label">Focus</span>
+                                    </button>
+                                    <button type="button" id="editorAiBtn" class="editor-action-btn editor-action-btn-ai" aria-label="AI commands" title="AI commands — Ctrl+Shift+A">
+                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        <span class="editor-action-label">AI</span>
+                                    </button>
+                                </div>
+                            </header>
+                            <div class="editor-body">
+                                <nav id="editorToc" class="editor-toc hidden" aria-label="Table of contents">
+                                    <div class="editor-toc-header">
+                                        <span>On this page</span>
+                                        <button type="button" id="editorTocCloseBtn" class="editor-toc-close" aria-label="Close contents">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <ol id="editorTocList" class="editor-toc-list"></ol>
+                                    <p id="editorTocEmpty" class="editor-toc-empty hidden">Add headings to build a table of contents.</p>
+                                </nav>
+                                <div class="editor-main">
+                                    <div id="quillEditor"></div>
+                                    <footer class="editor-footer" aria-live="polite">
+                                        <span id="editorWordCount">0 words</span>
+                                        <span class="editor-footer-sep" aria-hidden="true">·</span>
+                                        <span id="editorCharCount">0 characters</span>
+                                        <span class="editor-footer-sep" aria-hidden="true">·</span>
+                                        <span id="editorReadTime">~1 min read</span>
+                                    </footer>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+                <div id="emptyEditor" class="empty-state">
+                    <div class="empty-state-content">
+                        <div class="empty-state-icon-wrap">
+                            <i class="fa-regular fa-file-lines empty-state-icon"></i>
+                        </div>
+                        <p class="empty-state-title">No note selected</p>
+                        <p class="empty-state-text">Expand a folder in the sidebar and select a note, or create a new one to start writing.</p>
+                        <button id="emptyCreateNoteBtn" class="btn btn-primary empty-state-action" type="button">
+                            <i class="fa-solid fa-plus"></i>
+                            Create new note
+                        </button>
+                        <p class="empty-state-hint"><kbd>Ctrl</kbd> + <kbd>S</kbd> to save when editing</p>
+                    </div>
+                </div>
+            </main>
+
+        </div>
+    </div>
+
+    <!-- User Account View -->
+    <div id="userView" class="view-container settings-view hidden">
+        <div class="admin-container">
+            <div class="admin-header">
+                <h1><i class="fa-solid fa-user-gear"></i> Account</h1>
+                <button id="closeUserBtn" class="btn btn-secondary" type="button">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Notes
+                </button>
+            </div>
+
+            <div class="admin-card">
+                <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI (OpenRouter)</h3>
+                <p class="admin-card-desc">Connect your personal OpenRouter API key to translate, summarize, generate notes, create flashcards, quizzes, study plans, and more. Keys are encrypted on the server and never sent back to the browser after saving.</p>
+                <div class="ai-settings-tip">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <p>Get your OpenRouter API key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>, then use the <strong>AI</strong> button in the editor (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) or right-click a folder in the sidebar.</p>
+                </div>
+                <form id="userAiSettingsForm" class="ai-settings-form">
+                    <div class="ai-settings-fields">
+                        <div class="ai-field">
+                            <label class="ai-field-label" for="userOpenrouterKey">OpenRouter API key</label>
+                            <input type="password" id="userOpenrouterKey" class="ai-field-input" placeholder="sk-or-v1-…" autocomplete="off">
+                            <p id="userOpenrouterKeyStatus" class="ai-key-status hidden"></p>
+                        </div>
+                        <div class="ai-field">
+                            <label class="ai-field-label" for="userOpenrouterModel">Model</label>
+                            <input type="text" id="userOpenrouterModel" class="ai-field-input" list="userOpenrouterModelList" placeholder="google/gemma-4-26b-a4b-it" autocomplete="off" spellcheck="false">
+                            <datalist id="userOpenrouterModelList"></datalist>
+                            <p class="ai-field-hint">Choose a recommendation or type any OpenRouter model ID.</p>
+                        </div>
+                    </div>
+                    <div class="ai-settings-actions">
+                        <button type="submit" class="btn btn-primary">Save AI settings</button>
+                        <button type="button" id="userTestAiBtn" class="btn btn-secondary">Test connection</button>
+                        <button type="button" id="userRemoveAiKeyBtn" class="btn btn-secondary secondary-action-danger">Remove key</button>
+                    </div>
+                    <div id="userAiSettingsSummary" class="ai-settings-summary hidden" aria-live="polite"></div>
+                </form>
+            </div>
+
+            <div class="admin-card">
+                <h3>Backup &amp; Restore</h3>
+                <p class="admin-card-desc">Export or import your folders, notes, and images as a portable .mynote.zip archive.</p>
+                <div class="admin-backup-actions">
+                    <button id="exportNotesBtn" class="btn btn-secondary" type="button">
+                        <i class="fa-solid fa-file-export"></i>
+                        Export my notes
+                    </button>
+                    <button id="importNotesBtn" class="btn btn-secondary" type="button">
+                        <i class="fa-solid fa-file-import"></i>
+                        Import notes
+                    </button>
+                    <input id="importNotesInput" type="file" accept=".zip,.mynote.zip,application/zip" class="hidden" aria-hidden="true">
+                </div>
+                <label class="backup-mode-label" for="userImportMode">Import mode</label>
+                <select id="userImportMode" class="backup-mode-select admin-backup-mode" aria-label="Import mode">
+                    <option value="merge">Merge with existing</option>
+                    <option value="replace">Replace all my notes</option>
+                </select>
+                <div id="userImportSummary" class="admin-import-summary hidden" aria-live="polite"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin View -->
+    <div id="adminView" class="view-container admin-view hidden">
+        <div class="admin-container">
+            <div class="admin-header">
+                <h1><i class="fa-solid fa-gear"></i> Admin Panel</h1>
+                <button id="closeAdminBtn" class="btn btn-secondary">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+                </button>
+            </div>
+
+            <div class="admin-card">
+                <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI (OpenRouter)</h3>
+                <p class="admin-card-desc">Configure your admin OpenRouter API key for AI features: translate, summarize, flashcards, study tools, and more. Each user (including admins) manages their own key.</p>
+                <div class="ai-settings-tip">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <p>Get your OpenRouter API key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>, then use the <strong>AI</strong> button in the editor or right-click a folder in the sidebar.</p>
+                </div>
+                <form id="adminAiSettingsForm" class="ai-settings-form">
+                    <div class="ai-settings-fields">
+                        <div class="ai-field">
+                            <label class="ai-field-label" for="adminOpenrouterKey">OpenRouter API key</label>
+                            <input type="password" id="adminOpenrouterKey" class="ai-field-input" placeholder="sk-or-v1-…" autocomplete="off">
+                            <p id="adminOpenrouterKeyStatus" class="ai-key-status hidden"></p>
+                        </div>
+                        <div class="ai-field">
+                            <label class="ai-field-label" for="adminOpenrouterModel">Model</label>
+                            <input type="text" id="adminOpenrouterModel" class="ai-field-input" list="adminOpenrouterModelList" placeholder="google/gemma-4-26b-a4b-it" autocomplete="off" spellcheck="false">
+                            <datalist id="adminOpenrouterModelList"></datalist>
+                            <p class="ai-field-hint">Choose a recommendation or type any OpenRouter model ID.</p>
+                        </div>
+                    </div>
+                    <div class="ai-settings-actions">
+                        <button type="submit" class="btn btn-primary">Save AI settings</button>
+                        <button type="button" id="adminTestAiBtn" class="btn btn-secondary">Test connection</button>
+                        <button type="button" id="adminRemoveAiKeyBtn" class="btn btn-secondary secondary-action-danger">Remove key</button>
+                    </div>
+                    <div id="adminAiSettingsSummary" class="ai-settings-summary hidden" aria-live="polite"></div>
+                </form>
+            </div>
+
+            <div class="admin-card">
+                <h3>User Management</h3>
+                <p class="admin-card-desc">Add users, reset passwords, suspend access, or remove accounts.</p>
+                <form id="adminCreateUserForm" class="admin-form">
+                    <input type="email" id="newAdminEmail" placeholder="Email address" required autocomplete="off">
+                    <input type="password" id="newAdminPass" placeholder="Password (min. 6 characters)" required minlength="6" autocomplete="new-password">
+                    <select id="newAdminRole" aria-label="User role">
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-user-plus"></i>
+                        Add user
+                    </button>
+                </form>
+            </div>
+
+            <div class="admin-card">
+                <h3>All Users</h3>
+                <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminUsersList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Backup &amp; Restore</h3>
+                <p class="admin-card-desc">Export or import all users, folders, notes, and images. Passwords are never included in backups.</p>
+                <div class="admin-backup-actions">
+                    <button id="exportSystemBtn" class="btn btn-secondary" type="button">
+                        <i class="fa-solid fa-file-export"></i>
+                        Export all users
+                    </button>
+                    <button id="importSystemBtn" class="btn btn-secondary" type="button">
+                        <i class="fa-solid fa-file-import"></i>
+                        Import system backup
+                    </button>
+                    <input id="importSystemInput" type="file" accept=".zip,.mynote.zip,application/zip" class="hidden" aria-hidden="true">
+                </div>
+                <label class="backup-mode-label" for="systemImportMode">Import mode</label>
+                <select id="systemImportMode" class="backup-mode-select admin-backup-mode" aria-label="System import mode">
+                    <option value="merge">Merge with existing data</option>
+                    <option value="replace">Replace all notes (all users)</option>
+                </select>
+                <div id="adminImportSummary" class="admin-import-summary hidden" aria-live="polite"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tree context menu -->
+    <div id="treeContextMenu" class="tree-context-menu hidden" role="menu" aria-hidden="true"></div>
+
+    <!-- Modal -->
+    <div id="modalOverlay" class="modal-overlay hidden">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <h2 id="modalTitle" class="modal-title"></h2>
+            <p id="modalMessage" class="modal-message hidden"></p>
+            <input id="modalInput" class="modal-input hidden" type="text">
+            <div id="modalLocationPicker" class="modal-location hidden">
+                <label class="modal-field-label" for="modalNotebookSelect">Folder</label>
+                <select id="modalNotebookSelect" class="modal-select" aria-label="Folder"></select>
+                <input id="modalNewNotebookInput" class="modal-input modal-location-input hidden" type="text" placeholder="New folder name" autocomplete="off">
+
+                <label class="modal-field-label" for="modalSectionSelect">Subfolder</label>
+                <select id="modalSectionSelect" class="modal-select" aria-label="Subfolder"></select>
+                <input id="modalNewSectionInput" class="modal-input modal-location-input hidden" type="text" placeholder="New subfolder name" autocomplete="off">
+            </div>
+            <div id="modalAiPanel" class="modal-ai hidden">
+                <div id="modalAiCompose" class="modal-ai-compose hidden">
+                    <div class="modal-ai-compose-hero">
+                        <div class="modal-ai-compose-icon" aria-hidden="true">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </div>
+                        <div class="modal-ai-compose-copy">
+                            <p class="modal-ai-compose-eyebrow">Empty note</p>
+                            <p class="modal-ai-compose-lead">Tell the AI what you need — write, brainstorm, outline, translate, or anything else.</p>
+                        </div>
+                    </div>
+                    <label id="modalAiComposeLabel" class="modal-field-label" for="modalAiComposeInput">Your request</label>
+                    <textarea
+                        id="modalAiComposeInput"
+                        class="modal-ai-compose-input"
+                        rows="4"
+                        placeholder="e.g. Write a study guide about photosynthesis with key terms and a short quiz…"
+                    ></textarea>
+                    <div class="modal-ai-suggestions">
+                        <span class="modal-ai-suggestions-label">Quick starts</span>
+                        <div id="modalAiSuggestionChips" class="modal-ai-chips" role="list"></div>
+                    </div>
+                    <button type="button" id="modalAiAdvancedToggle" class="modal-ai-advanced-toggle">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Show all actions</span>
+                    </button>
+                </div>
+
+                <div id="modalAiAdvanced" class="modal-ai-advanced">
+                <label class="modal-field-label" for="modalAiAction">Action</label>
+                <select id="modalAiAction" class="modal-select" aria-label="AI action">
+                    <optgroup label="Writing">
+                        <option value="improve">Improve writing</option>
+                        <option value="grammar">Fix grammar &amp; spelling</option>
+                        <option value="shorter">Make shorter</option>
+                        <option value="expand">Expand &amp; elaborate</option>
+                        <option value="formal">Make formal</option>
+                        <option value="casual">Make casual</option>
+                        <option value="continue">Continue writing</option>
+                    </optgroup>
+                    <optgroup label="Understand &amp; organize">
+                        <option value="summarize">Summarize</option>
+                        <option value="key_points">Extract key points</option>
+                        <option value="outline">Create outline</option>
+                        <option value="explain">Explain simply</option>
+                        <option value="keywords">Extract keywords</option>
+                        <option value="ask">Ask about this note</option>
+                    </optgroup>
+                    <optgroup label="Translate">
+                        <option value="translate">Translate</option>
+                    </optgroup>
+                    <optgroup label="Create">
+                        <option value="generate">Write on a topic</option>
+                        <option value="brainstorm">Brainstorm ideas</option>
+                        <option value="title">Suggest title</option>
+                    </optgroup>
+                    <optgroup label="Study &amp; memorize">
+                        <option value="flashcards">Generate flashcards</option>
+                        <option value="quiz">Study quiz</option>
+                        <option value="memorize">Memory tips &amp; mnemonics</option>
+                        <option value="study_plan">Create study plan</option>
+                        <option value="actions">Extract to-do items</option>
+                    </optgroup>
+                    <optgroup label="Folder">
+                        <option value="summarize_section">Summarize subfolder</option>
+                        <option value="summarize_notebook">Summarize folder</option>
+                    </optgroup>
+                    <optgroup label="Advanced">
+                        <option value="custom">Custom instructions</option>
+                    </optgroup>
+                </select>
+
+                <label id="modalAiLangLabel" class="modal-field-label hidden" for="modalAiLang">Target language</label>
+                <select id="modalAiLang" class="modal-select hidden" aria-label="Target language">
+                    <option value="English">English</option>
+                    <option value="Romanian">Romanian</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="Italian">Italian</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="Dutch">Dutch</option>
+                    <option value="Polish">Polish</option>
+                    <option value="Russian">Russian</option>
+                    <option value="Ukrainian">Ukrainian</option>
+                    <option value="Chinese (Simplified)">Chinese (Simplified)</option>
+                    <option value="Chinese (Traditional)">Chinese (Traditional)</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Korean">Korean</option>
+                    <option value="Arabic">Arabic</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Turkish">Turkish</option>
+                </select>
+
+                <label id="modalAiTopicLabel" class="modal-field-label hidden" for="modalAiTopic">Topic</label>
+                <textarea id="modalAiTopic" class="modal-textarea hidden" rows="2" placeholder="What should the AI write about?"></textarea>
+
+                <label id="modalAiQuestionLabel" class="modal-field-label hidden" for="modalAiQuestion">Your question</label>
+                <textarea id="modalAiQuestion" class="modal-textarea hidden" rows="2" placeholder="Ask anything about the note content…"></textarea>
+
+                <label id="modalAiPromptLabel" class="modal-field-label hidden" for="modalAiPrompt">Instructions</label>
+                <textarea id="modalAiPrompt" class="modal-textarea hidden" rows="3" placeholder="Describe what you want the AI to do…"></textarea>
+
+                <label id="modalAiApplyLabel" class="modal-field-label hidden" for="modalAiApplyMode">Apply result</label>
+                <select id="modalAiApplyMode" class="modal-select hidden" aria-label="Apply result mode">
+                    <option value="replace">Replace note / selection</option>
+                    <option value="append">Append to note</option>
+                    <option value="prepend">Insert at top of note</option>
+                </select>
+
+                <p id="modalAiScope" class="modal-ai-scope"></p>
+                </div>
+
+                <div id="modalAiLoading" class="modal-ai-loading hidden" aria-live="polite">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    <span>Generating with OpenRouter…</span>
+                </div>
+
+                <label id="modalAiResultLabel" class="modal-field-label hidden" for="modalAiResult">Result</label>
+                <textarea id="modalAiResult" class="modal-textarea modal-ai-result hidden" rows="8" readonly></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="modalCancel" class="btn btn-secondary hidden">Cancel</button>
+                <button type="button" id="modalConfirm" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="aiPaletteOverlay" class="ai-palette-overlay hidden" aria-hidden="true">
+        <div class="ai-palette" role="dialog" aria-modal="true" aria-labelledby="aiPaletteHeading">
+            <h2 id="aiPaletteHeading" class="visually-hidden">AI commands</h2>
+
+            <div id="aiPaletteViewCompose" class="ai-palette-view hidden">
+                <div class="ai-palette-compose-head">
+                    <div class="ai-palette-compose-icon" aria-hidden="true"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                    <div>
+                        <p class="ai-palette-compose-title">Ask AI</p>
+                        <p class="ai-palette-compose-sub">Describe what you want written in this note.</p>
+                    </div>
+                    <button type="button" id="aiPaletteComposeClose" class="ai-palette-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <textarea id="aiPaletteComposeInput" class="ai-palette-compose-input" rows="4" placeholder="e.g. Write a study guide about photosynthesis with key terms and a short quiz…"></textarea>
+                <div class="ai-palette-suggestions">
+                    <span class="ai-palette-suggestions-label">Quick starts</span>
+                    <div id="aiPaletteSuggestionChips" class="ai-palette-chips"></div>
+                </div>
+                <div class="ai-palette-actions">
+                    <button type="button" id="aiPaletteComposeCancel" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="aiPaletteComposeRun" class="btn btn-primary"><i class="fa-solid fa-sparkles"></i> Generate</button>
+                </div>
+            </div>
+
+            <div id="aiPaletteViewPicker" class="ai-palette-view hidden">
+                <div class="ai-palette-top">
+                    <div class="ai-palette-search-wrap">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <input id="aiPaletteSearch" type="search" placeholder="Search commands or describe what you need…" autocomplete="off" spellcheck="false" aria-label="Search AI commands">
+                    </div>
+                    <button type="button" id="aiPaletteClose" class="ai-palette-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="aiPaletteScopeBadge" class="ai-palette-scope-badge hidden"></div>
+                <div id="aiPaletteList" class="ai-palette-list" role="listbox" aria-label="AI commands"></div>
+                <div class="ai-palette-hints">
+                    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+                    <span><kbd>↵</kbd> select</span>
+                    <span><kbd>Esc</kbd> close</span>
+                </div>
+            </div>
+
+            <div id="aiPaletteViewConfig" class="ai-palette-view hidden">
+                <div class="ai-palette-config-head">
+                    <button type="button" id="aiPaletteBack" class="ai-palette-icon-btn" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+                    <div class="ai-palette-config-meta">
+                        <div id="aiPaletteConfigIcon" class="ai-palette-config-icon" aria-hidden="true"></div>
+                        <div>
+                            <p id="aiPaletteConfigTitle" class="ai-palette-config-title"></p>
+                            <p id="aiPaletteConfigDesc" class="ai-palette-config-desc"></p>
+                        </div>
+                    </div>
+                    <button type="button" id="aiPaletteConfigClose" class="ai-palette-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="aiPaletteConfigBody" class="ai-palette-config-body"></div>
+                <div id="aiPaletteApplyWrap" class="ai-palette-apply-wrap hidden">
+                    <span class="ai-palette-field-label">Apply result</span>
+                    <div id="aiPaletteApplySegments" class="ai-palette-segments" role="group" aria-label="Apply result">
+                        <button type="button" class="ai-palette-segment is-active" data-apply="replace">Replace</button>
+                        <button type="button" class="ai-palette-segment" data-apply="append">Append</button>
+                        <button type="button" class="ai-palette-segment" data-apply="prepend">Insert top</button>
+                    </div>
+                </div>
+                <div class="ai-palette-actions">
+                    <button type="button" id="aiPaletteGenerate" class="btn btn-primary"><i class="fa-solid fa-sparkles"></i> Generate</button>
+                </div>
+            </div>
+
+            <div id="aiPaletteViewLoading" class="ai-palette-view hidden">
+                <div class="ai-palette-loading">
+                    <div class="ai-palette-loading-ring" aria-hidden="true"></div>
+                    <p id="aiPaletteLoadingText" class="ai-palette-loading-text">Generating with AI…</p>
+                    <p id="aiPaletteLoadingAction" class="ai-palette-loading-sub"></p>
+                </div>
+            </div>
+
+            <div id="aiPaletteViewResult" class="ai-palette-view hidden">
+                <div class="ai-palette-result-head">
+                    <div>
+                        <p class="ai-palette-result-eyebrow">AI result</p>
+                        <p id="aiPaletteResultTitle" class="ai-palette-result-title"></p>
+                    </div>
+                    <button type="button" id="aiPaletteResultClose" class="ai-palette-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <textarea id="aiPaletteResultText" class="ai-palette-result-text" rows="10" readonly aria-label="AI generated result"></textarea>
+                <div class="ai-palette-actions">
+                    <button type="button" id="aiPaletteTryAgain" class="btn btn-secondary">Try another</button>
+                    <button type="button" id="aiPaletteApply" class="btn btn-primary">Apply to note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="aiSelectionBar" class="ai-selection-bar hidden" role="toolbar" aria-label="AI quick actions">
+        <button type="button" class="ai-selection-btn" data-action="improve" title="Improve writing"><i class="fa-solid fa-pen-fancy"></i><span>Improve</span></button>
+        <button type="button" class="ai-selection-btn" data-action="summarize" title="Summarize"><i class="fa-solid fa-compress"></i><span>Summarize</span></button>
+        <button type="button" class="ai-selection-btn" data-action="explain" title="Explain simply"><i class="fa-solid fa-lightbulb"></i><span>Explain</span></button>
+        <button type="button" class="ai-selection-btn" data-action="translate" title="Translate"><i class="fa-solid fa-language"></i><span>Translate</span></button>
+        <button type="button" class="ai-selection-btn" data-action="shorter" title="Make shorter"><i class="fa-solid fa-scissors"></i><span>Shorter</span></button>
+        <span class="ai-selection-divider" aria-hidden="true"></span>
+        <button type="button" id="aiSelectionMore" class="ai-selection-btn ai-selection-btn-more" title="All AI commands"><i class="fa-solid fa-ellipsis"></i><span>More</span></button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <script src="app.js?v=39"></script>
+</body>
+</html>
