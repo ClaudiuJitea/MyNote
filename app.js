@@ -3200,13 +3200,32 @@ function scrollActiveTreeRowIntoView() {
 }
 
 async function handleTreeClick(e) {
-    const notebookRow = e.target.closest('.tree-row[data-tree-type="notebook"]');
-    if (
-        notebookRow
-        && !e.target.closest('.tree-action, .tree-toggle, .tree-drag-handle')
-        && retractNotesPanelIfOpen()
-    ) {
-        renderTree();
+    if (!e.target.closest('.tree-action, .tree-toggle, .tree-drag-handle')) {
+        const row = e.target.closest('.tree-row');
+        if (row) {
+            const treeType = row.dataset.treeType;
+            const treeId = row.dataset.treeId;
+
+            switch (treeType) {
+                case 'root':
+                    retractNotesPanelIfOpen();
+                    state.expanded.root = !state.expanded.root;
+                    renderTree();
+                    return;
+                case 'starred-root':
+                    retractNotesPanelIfOpen();
+                    state.expanded.starred = state.expanded.starred === false;
+                    renderTree();
+                    return;
+                case 'notebook':
+                    if (treeId) {
+                        await toggleNotebook(treeId);
+                    }
+                    return;
+                default:
+                    break;
+            }
+        }
     }
 
     const actionEl = e.target.closest('[data-action]');
