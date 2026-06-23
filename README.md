@@ -54,6 +54,8 @@ User management, system-wide backup, and admin AI configuration.
 - **Sketch drawing** — Draw directly in notes from the editor toolbar (**Draw** or `Ctrl+Shift+D`): pen, highlighter, lines, arrows, shapes, text, and eraser; numeric brush/text size; 18-color palette plus custom color picker; resizable canvas; optional crop-to-drawing on insert (PNG uploaded like pasted images)
 - **Search** — Full-text search across all of your notes
 - **Images** — Upload images to notes; OCR text is stored for search
+- **Image Resizing & Float Alignment** — Drag corner handles to scale images proportionally with aspect-ratio lock; float left/right (with text wrapping), center, or reset to default from a floating layout toolbar (auto-constrained within margins to prevent clipping)
+- **Dynamic Font Manager & Offline Cache** — Install/delete any Google Font dynamically by name in Settings; download and cache all active font variants (`.woff2`) locally to the server for 100% offline note-taking without external CDN requests
 - **Starred notes** — Star a note from the editor toolbar (next to AI) or from the sidebar; starred notes appear in a dedicated sidebar section and on Home
 - **Table of contents** — Auto-generated from headings inside the current note
 - **Focus mode** — Hide the sidebar and other chrome to focus on writing
@@ -168,6 +170,21 @@ MyNote/
   setup_local.sh      # Local dev bootstrap script
   DEPLOY.md           # cPanel deployment guide
 ```
+
+## Typography & offline fonts
+
+Manage fonts from the **Account Settings** panel under **Typography & Offline Fonts**:
+- **Add custom Google Fonts**: Enter the name of any Google Font (e.g. *Playfair Display*, *Oswald*). The server validates the font name and adds it to the active whitelist.
+- **Offline Caching**: Click **Download fonts to server** to package all configured fonts locally to the server's filesystem. When active, the application runs 100% offline without querying Google CDNs.
+- **Dynamic previews**: The font selector dropdown in the editor toolbar previews each font in its actual typeface layout.
+
+## Image resizing & alignment
+
+Click any image in the editor to activate the resize handles and toolbar:
+- **Resizing**: Drag any of the four circular corner handles to scale the image proportionally.
+- **Presets**: Resize instantly to standard widths (`25%`, `50%`, `100%`, or `Auto` for original).
+- **Alignment**: Align center or float left/right. Floating wraps surrounding paragraph text cleanly starting from the top.
+- **Layout containment**: The floating toolbar is automatically bounded horizontally within the editor borders to prevent clipping.
 
 ## AI setup
 

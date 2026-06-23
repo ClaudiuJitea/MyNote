@@ -38,6 +38,22 @@ PHP
     echo "Created api/config.local.php"
 fi
 
+# Check if database and admin user already exist
+DB_EXISTS=$(sudo mysql -N -B -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB_NAME}'" 2>/dev/null || true)
+CREATE_ADMIN=true
+
+if [[ -n "$DB_EXISTS" ]]; then
+    echo "Database '${DB_NAME}' already exists."
+    # Check if admin user exists in the database
+    ADMIN_EMAIL_DB=$(sudo mysql -N -B -e "SELECT email FROM users WHERE role = 'admin' LIMIT 1" "${DB_NAME}" 2>/dev/null || true)
+    if [[ -n "$ADMIN_EMAIL_DB" ]]; then
+        echo "Detected existing admin user: ${ADMIN_EMAIL_DB}"
+        ADMIN_EMAIL="${ADMIN_EMAIL_DB}"
+        ADMIN_PASS="(Retained from previous deployment)"
+        CREATE_ADMIN=false
+    fi
+fi
+
 echo "Creating MySQL database, user, and tables..."
 sudo mysql <<SQL
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -109,8 +125,12 @@ if ! php -m | grep -qi '^zip$'; then
     echo "WARNING: PHP zip extension not found. Install it for export/import (e.g. sudo apt install php-zip)."
 fi
 
-echo "Creating/updating admin user..."
-php scripts/setup_admin_cli.php "${ADMIN_EMAIL}" "${ADMIN_PASS}"
+if [[ "$CREATE_ADMIN" = true ]]; then
+    echo "Creating admin user..."
+    php scripts/setup_admin_cli.php "${ADMIN_EMAIL}" "${ADMIN_PASS}"
+else
+    echo "Existing admin user detected. Keeping current credentials."
+fi
 
 echo
 echo "Setup complete."
