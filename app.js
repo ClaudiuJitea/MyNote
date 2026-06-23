@@ -146,6 +146,12 @@ const adminTestAiBtn = document.getElementById('adminTestAiBtn');
 const adminRemoveAiKeyBtn = document.getElementById('adminRemoveAiKeyBtn');
 const adminAiSettingsSummary = document.getElementById('adminAiSettingsSummary');
 
+const downloadFontsBtn = document.getElementById('downloadFontsBtn');
+const deleteFontsBtn = document.getElementById('deleteFontsBtn');
+const fontsStatusBadge = document.getElementById('fontsStatusBadge');
+const fontsSummary = document.getElementById('fontsSummary');
+
+
 let quill;
 let saveTimeout;
 let editorTocTimeout;
@@ -3867,6 +3873,483 @@ function resetEditorEnhancements() {
     }
 }
 
+
+// Register custom Font whitelist dynamically
+const defaultFonts = [
+    { id: 'inter', name: 'Inter (Default)', family: 'Inter', category: 'sans-serif' },
+    { id: 'roboto', name: 'Roboto', family: 'Roboto', category: 'sans-serif' },
+    { id: 'lora', name: 'Lora (Serif)', family: 'Lora', category: 'serif' },
+    { id: 'caveat', name: 'Caveat (Handwriting)', family: 'Caveat', category: 'cursive' },
+    { id: 'jetbrains-mono', name: 'JetBrains Mono', family: 'JetBrains Mono', category: 'monospace' }
+];
+
+let activeFonts = defaultFonts;
+try {
+    const stored = localStorage.getItem('my_note_fonts');
+    if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            activeFonts = parsed;
+        }
+    }
+} catch (e) {}
+
+// Inject dynamic CSS rules for active fonts
+function injectDynamicFontStyles() {
+    let cssText = '';
+    activeFonts.forEach(f => {
+        cssText += `.ql-font-${f.id} { font-family: '${f.family}', ${f.category} !important; }\n`;
+        cssText += `.ql-snow .ql-picker.ql-font .ql-picker-label[data-value="${f.id}"]::before,\n`;
+        cssText += `.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="${f.id}"]::before {\n`;
+        cssText += `    content: '${f.name}' !important;\n`;
+        cssText += `}\n`;
+        cssText += `.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="${f.id}"] {\n`;
+        cssText += `    font-family: '${f.family}', ${f.category} !important;\n`;
+        if (f.id === 'caveat') {
+            cssText += `    font-size: 1.2rem !important;\n`;
+        } else if (f.id === 'jetbrains-mono') {
+            cssText += `    font-size: 0.85rem !important;\n`;
+        }
+        cssText += `}\n`;
+    });
+
+    // Default label fallback styling
+    cssText += `.ql-snow .ql-picker.ql-font .ql-picker-label::before,\n`;
+    cssText += `.ql-snow .ql-picker.ql-font .ql-picker-item::before {\n`;
+    cssText += `    content: 'Inter (Default)';\n`;
+    cssText += `}\n`;
+    cssText += `.ql-snow .ql-picker.ql-font .ql-picker-label {\n`;
+    cssText += `    font-family: 'Inter', sans-serif !important;\n`;
+    cssText += `}\n`;
+
+    // Remove any previously injected style
+    const existing = document.getElementById('dynamic-font-styles');
+    if (existing) existing.remove();
+
+    const styleEl = document.createElement('style');
+    styleEl.id = 'dynamic-font-styles';
+    styleEl.textContent = cssText;
+    document.head.appendChild(styleEl);
+}
+injectDynamicFontStyles();
+
+const Font = Quill.import('formats/font');
+Font.whitelist = activeFonts.map(f => f.id);
+Quill.register(Font, true);
+
+// Define custom image format to preserve style, width, height, and alt attributes
+const BaseImageFormat = Quill.import('formats/image');
+const ImageFormatAttributesList = ['alt', 'height', 'width', 'style'];
+
+class CustomImageFormat extends BaseImageFormat {
+    static formats(domNode) {
+        return ImageFormatAttributesList.reduce((formats, attribute) => {
+            if (domNode.hasAttribute(attribute)) {
+                formats[attribute] = domNode.getAttribute(attribute);
+            }
+            return formats;
+        }, {});
+    }
+
+    format(name, value) {
+        if (ImageFormatAttributesList.indexOf(name) > -1) {
+            if (value) {
+                this.domNode.setAttribute(name, value);
+            } else {
+                this.domNode.removeAttribute(name);
+            }
+        } else {
+            super.format(name, value);
+        }
+    }
+}
+Quill.register(CustomImageFormat, true);
+
+// Image Resize and Alignment Module for Quill
+class ImageResize {
+    constructor(quill, options = {}) {
+        this.quill = quill;
+        this.options = options;
+        this.img = null;
+        this.overlay = null;
+
+        // Bind events
+        this.quill.root.addEventListener('click', this.handleImageClick.bind(this), false);
+
+        // Listen to scroll events on the scrollable container to reposition the overlay
+        const editorScroll = this.quill.root.closest('.editor-scroll');
+        if (editorScroll) {
+            editorScroll.addEventListener('scroll', () => {
+                if (this.img) {
+                    this.updateOverlayPosition();
+                }
+            }, { passive: true });
+        }
+
+        // Hide or update overlay on text changes
+        this.quill.on('text-change', () => {
+            if (this.img && !document.body.contains(this.img)) {
+                this.hideOverlay();
+            } else if (this.img) {
+                this.updateOverlayPosition();
+            }
+        });
+
+        // Hide overlay on global clicks outside
+        document.addEventListener('mousedown', this.handleGlobalClick.bind(this), true);
+
+        // Handle delete/backspace keys to delete selected image
+        document.addEventListener('keydown', this.handleKeyDown.bind(this), true);
+
+        // Handle window resize
+        window.addEventListener('resize', this.updateOverlayPosition.bind(this));
+    }
+
+    handleImageClick(e) {
+        if (e.target && e.target.tagName === 'IMG') {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showOverlay(e.target);
+        } else {
+            this.hideOverlay();
+        }
+    }
+
+    handleGlobalClick(e) {
+        if (!this.img) return;
+
+        // If clicking the image or inside the overlay, do nothing
+        if (e.target === this.img || (this.overlay && this.overlay.contains(e.target))) {
+            return;
+        }
+
+        this.hideOverlay();
+    }
+
+    handleKeyDown(e) {
+        if (!this.img) return;
+
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const blot = Quill.find(this.img);
+            if (blot) {
+                const index = this.quill.getIndex(blot);
+                this.quill.deleteText(index, 1);
+                this.quill.update();
+                if (typeof scheduleSave === 'function') {
+                    scheduleSave();
+                }
+            } else {
+                this.img.remove();
+                this.quill.update();
+            }
+            this.hideOverlay();
+        }
+    }
+
+    showOverlay(img) {
+        if (this.img === img) return;
+
+        this.hideOverlay();
+        this.img = img;
+
+        const container = this.quill.root.parentNode; // .ql-container
+
+        // Set container position relative if it isn't
+        if (window.getComputedStyle(container).position === 'static') {
+            container.style.position = 'relative';
+        }
+
+        // Create overlay element
+        this.overlay = document.createElement('div');
+        this.overlay.className = 'image-resize-overlay';
+
+        // Add handles
+        const corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+        corners.forEach(corner => {
+            const handle = document.createElement('div');
+            handle.className = `resize-handle ${corner}`;
+            handle.addEventListener('mousedown', (e) => this.startResize(e, corner), false);
+            this.overlay.appendChild(handle);
+        });
+
+        // Add dimensions badge
+        const badge = document.createElement('div');
+        badge.className = 'image-size-badge';
+        this.overlay.appendChild(badge);
+
+        // Add toolbar
+        const toolbar = document.createElement('div');
+        toolbar.className = 'image-align-toolbar';
+
+        // Alignment options
+        const alignOptions = [
+            { align: 'left', icon: 'fa-align-left', title: 'Align Left' },
+            { align: 'center', icon: 'fa-align-center', title: 'Align Center' },
+            { align: 'right', icon: 'fa-align-right', title: 'Align Right' },
+            { align: 'default', icon: 'fa-align-justify', title: 'Full Width / Default' }
+        ];
+
+        alignOptions.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'align-btn';
+            btn.title = opt.title;
+            btn.innerHTML = `<i class="fa-solid ${opt.icon}"></i>`;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleAlign(opt.align);
+            });
+            toolbar.appendChild(btn);
+        });
+
+        // Separator
+        const sep = document.createElement('div');
+        sep.className = 'toolbar-separator';
+        toolbar.appendChild(sep);
+
+        // Sizing preset buttons
+        const sizeOptions = [
+            { preset: '25%', label: '25%' },
+            { preset: '50%', label: '50%' },
+            { preset: '100%', label: '100%' },
+            { preset: 'auto', label: 'Auto' }
+        ];
+
+        sizeOptions.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'size-preset-btn';
+            btn.textContent = opt.label;
+            btn.title = `Scale to ${opt.label}`;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleSizePreset(opt.preset);
+            });
+            toolbar.appendChild(btn);
+        });
+
+        this.overlay.appendChild(toolbar);
+        container.appendChild(this.overlay);
+
+        // Position overlay
+        this.updateOverlayPosition();
+
+        // Set active states in toolbar
+        const currentAlign = this.getAlignment();
+        this.updateToolbarActiveStates(currentAlign);
+    }
+
+    hideOverlay() {
+        if (this.overlay) {
+            this.overlay.remove();
+            this.overlay = null;
+        }
+        this.img = null;
+    }
+
+    updateOverlayPosition() {
+        if (!this.img || !this.overlay) return;
+
+        const imgRect = this.img.getBoundingClientRect();
+        const container = this.quill.root.parentNode;
+        const containerRect = container.getBoundingClientRect();
+
+        const top = imgRect.top - containerRect.top;
+        const left = imgRect.left - containerRect.left;
+
+        this.overlay.style.top = `${top}px`;
+        this.overlay.style.left = `${left}px`;
+        this.overlay.style.width = `${imgRect.width}px`;
+        this.overlay.style.height = `${imgRect.height}px`;
+
+        // Update size badge
+        const badge = this.overlay.querySelector('.image-size-badge');
+        if (badge) {
+            badge.textContent = `${Math.round(imgRect.width)} × ${Math.round(imgRect.height)}`;
+        }
+
+        // Adjust toolbar position (above or below depending on room)
+        const toolbar = this.overlay.querySelector('.image-align-toolbar');
+        if (toolbar) {
+            const tooCloseToTop = top < 60;
+            if (tooCloseToTop) {
+                toolbar.style.top = 'auto';
+                toolbar.style.bottom = '-45px';
+            } else {
+                toolbar.style.top = '-45px';
+                toolbar.style.bottom = 'auto';
+            }
+
+            // Adjust horizontal position dynamically to prevent being cut off at page edges
+            const toolbarWidth = toolbar.offsetWidth || 320;
+            let absoluteToolbarLeft = left + (imgRect.width / 2) - (toolbarWidth / 2);
+
+            const minLeft = 8;
+            const maxLeft = containerRect.width - toolbarWidth - 8;
+
+            if (absoluteToolbarLeft < minLeft) {
+                absoluteToolbarLeft = minLeft;
+            }
+            if (absoluteToolbarLeft > maxLeft) {
+                absoluteToolbarLeft = maxLeft;
+            }
+
+            const relativeToolbarLeft = absoluteToolbarLeft - left;
+            toolbar.style.left = `${relativeToolbarLeft}px`;
+            toolbar.style.transform = 'none';
+        }
+    }
+
+    getAlignment() {
+        const style = this.img.getAttribute('style') || '';
+        if (style.includes('float: left') || this.img.style.float === 'left') return 'left';
+        if (style.includes('float: right') || this.img.style.float === 'right') return 'right';
+        if (style.includes('display: block') || this.img.style.display === 'block') return 'center';
+        return 'default';
+    }
+
+    handleAlign(align) {
+        if (!this.img) return;
+
+        const width = this.img.style.width;
+        const height = this.img.style.height;
+
+        // Reset alignment styles
+        this.img.style.float = '';
+        this.img.style.display = '';
+        this.img.style.margin = '';
+
+        if (align === 'left') {
+            this.img.style.float = 'left';
+            this.img.style.margin = '0.5rem 1.5rem 0.5rem 0';
+            this.img.style.display = 'inline';
+        } else if (align === 'center') {
+            this.img.style.display = 'block';
+            this.img.style.margin = '1rem auto';
+            this.img.style.float = 'none';
+        } else if (align === 'right') {
+            this.img.style.float = 'right';
+            this.img.style.margin = '0.5rem 0 0.5rem 1.5rem';
+            this.img.style.display = 'inline';
+        } else {
+            this.img.style.display = 'inline-block';
+            this.img.style.margin = '0.5rem 0';
+        }
+
+        // Restore width/height
+        if (width) this.img.style.width = width;
+        if (height) this.img.style.height = height;
+
+        this.quill.update();
+        if (typeof scheduleSave === 'function') {
+            scheduleSave();
+        }
+
+        this.updateToolbarActiveStates(align);
+        setTimeout(() => this.updateOverlayPosition(), 50);
+    }
+
+    handleSizePreset(preset) {
+        if (!this.img) return;
+
+        if (preset === 'auto') {
+            this.img.removeAttribute('width');
+            this.img.removeAttribute('height');
+            this.img.style.width = '';
+            this.img.style.height = '';
+        } else {
+            this.img.removeAttribute('width');
+            this.img.removeAttribute('height');
+            this.img.style.width = preset;
+            this.img.style.height = 'auto';
+        }
+
+        this.quill.update();
+        if (typeof scheduleSave === 'function') {
+            scheduleSave();
+        }
+
+        setTimeout(() => this.updateOverlayPosition(), 50);
+    }
+
+    updateToolbarActiveStates(align) {
+        if (!this.overlay) return;
+
+        const alignBtns = this.overlay.querySelectorAll('.align-btn');
+        const options = ['left', 'center', 'right', 'default'];
+
+        alignBtns.forEach((btn, index) => {
+            const opt = options[index];
+            if (opt === align) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+
+    startResize(e, corner) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startWidth = this.img.clientWidth;
+        const startHeight = this.img.clientHeight;
+        const aspectRatio = startWidth / startHeight;
+
+        const handleMouseMove = (moveEvent) => {
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+
+            let newWidth = startWidth;
+
+            if (corner.includes('right')) {
+                newWidth = startWidth + dx;
+            } else if (corner.includes('left')) {
+                newWidth = startWidth - dx;
+            }
+
+            // Constrain minimum width
+            if (newWidth < 40) newWidth = 40;
+
+            // Constrain max width (container clientWidth)
+            const parentWidth = this.quill.root.clientWidth - 40;
+            if (newWidth > parentWidth) newWidth = parentWidth;
+
+            const newHeight = Math.round(newWidth / aspectRatio);
+
+            this.img.removeAttribute('width');
+            this.img.removeAttribute('height');
+            this.img.style.width = `${newWidth}px`;
+            this.img.style.height = `${newHeight}px`;
+
+            this.updateOverlayPosition();
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+
+            this.quill.update();
+            if (typeof scheduleSave === 'function') {
+                scheduleSave();
+            }
+
+            this.updateOverlayPosition();
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    }
+}
+Quill.register('modules/imageResize', ImageResize);
+
 function initQuill() {
     quill = new Quill('#quillEditor', {
         theme: 'snow',
@@ -3878,6 +4361,7 @@ function initQuill() {
                 userOnly: true
             },
             toolbar: [
+                [{ 'font': activeFonts.map(f => f.id) }],
                 [{ 'header': [1, 2, 3, false] }],
                 ['bold', 'italic', 'underline', 'strike'],
                 [{ 'background': [] }],
@@ -3886,7 +4370,8 @@ function initQuill() {
                 [{ 'indent': '-1' }, { 'indent': '+1' }],
                 ['link', 'image'],
                 ['clean']
-            ]
+            ],
+            imageResize: {}
         }
     });
 
@@ -5942,7 +6427,225 @@ userPanelBtn.onclick = () => {
     userView.classList.remove('hidden');
     adminView.classList.add('hidden');
     loadAiSettingsForm(USER_AI_FORM);
+    checkFontsStatus();
 };
+
+async function checkFontsStatus() {
+    if (!fontsStatusBadge) return;
+    fontsStatusBadge.className = 'fonts-badge status-loading';
+    fontsStatusBadge.textContent = 'Checking…';
+    try {
+        const res = await apiFetch('api/settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'check_fonts' })
+        });
+        const data = await res.json();
+
+        if (data.fonts) {
+            const storedStr = localStorage.getItem('my_note_fonts');
+            const newStr = JSON.stringify(data.fonts);
+            if (storedStr !== newStr) {
+                localStorage.setItem('my_note_fonts', newStr);
+                activeFonts = data.fonts;
+            }
+            renderFontsConfigList(data.fonts);
+        }
+
+        if (data.downloaded) {
+            fontsStatusBadge.className = 'fonts-badge status-local';
+            fontsStatusBadge.textContent = 'Offline (Downloaded)';
+            deleteFontsBtn?.classList.remove('hidden');
+            localStorage.setItem('offline_fonts_enabled', 'true');
+        } else {
+            fontsStatusBadge.className = 'fonts-badge status-online';
+            fontsStatusBadge.textContent = 'CDN (Online)';
+            deleteFontsBtn?.classList.add('hidden');
+            localStorage.setItem('offline_fonts_enabled', 'false');
+        }
+    } catch (e) {
+        fontsStatusBadge.className = 'fonts-badge status-online';
+        fontsStatusBadge.textContent = 'CDN (Online)';
+        deleteFontsBtn?.classList.add('hidden');
+        localStorage.setItem('offline_fonts_enabled', 'false');
+    }
+}
+
+function renderFontsConfigList(fonts) {
+    const listEl = document.getElementById('fontsConfigList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    fonts.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'font-config-item';
+        
+        const label = document.createElement('span');
+        label.className = 'font-config-name';
+        label.textContent = `${f.name} (${f.category})`;
+        label.style.fontFamily = `'${f.family}', ${f.category}`;
+        item.appendChild(label);
+
+        if (f.id !== 'inter') {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'font-config-delete-btn';
+            deleteBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+            deleteBtn.title = `Delete ${f.name}`;
+            deleteBtn.type = 'button';
+            deleteBtn.onclick = async () => {
+                const confirmed = await modalConfirm(
+                    `Are you sure you want to remove "${f.name}"? This will invalidate the offline font cache and reload the page.`,
+                    'Delete font family',
+                    'Delete'
+                );
+                if (!confirmed) return;
+                try {
+                    const res = await apiFetch('api/settings.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'delete_font', id: f.id })
+                    });
+                    const resData = await res.json();
+                    if (resData.success) {
+                        localStorage.setItem('my_note_fonts', JSON.stringify(resData.fonts));
+                        localStorage.setItem('offline_fonts_enabled', 'false');
+                        window.location.reload();
+                    } else {
+                        await modalAlert(resData.error || 'Failed to delete font', 'Error');
+                    }
+                } catch(err) {
+                    await modalAlert(err.message || 'Failed to delete font', 'Error');
+                }
+            };
+            item.appendChild(deleteBtn);
+        } else {
+            const systemLabel = document.createElement('span');
+            systemLabel.className = 'font-config-system-badge';
+            systemLabel.textContent = 'Required';
+            item.appendChild(systemLabel);
+        }
+
+        listEl.appendChild(item);
+    });
+}
+
+async function handleDownloadFonts() {
+    if (!downloadFontsBtn) return;
+    downloadFontsBtn.disabled = true;
+    const oldText = downloadFontsBtn.innerHTML;
+    downloadFontsBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Downloading…';
+    if (fontsSummary) {
+        fontsSummary.className = 'admin-import-summary';
+        fontsSummary.textContent = 'Downloading Google Fonts to server, this may take a moment…';
+        fontsSummary.classList.remove('hidden');
+    }
+    try {
+        const res = await apiFetch('api/settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'download_fonts' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            localStorage.setItem('offline_fonts_enabled', 'true');
+            if (fontsSummary) {
+                fontsSummary.className = 'admin-import-summary import-success';
+                fontsSummary.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + (data.message || 'Fonts downloaded successfully!');
+            }
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'fonts/local_fonts.css';
+            document.head.appendChild(link);
+        } else {
+            throw new Error(data.error || 'Failed to download fonts');
+        }
+    } catch (e) {
+        if (fontsSummary) {
+            fontsSummary.className = 'admin-import-summary import-error';
+            fontsSummary.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> ' + (e.message || 'Failed to download fonts.');
+        }
+    } finally {
+        downloadFontsBtn.disabled = false;
+        downloadFontsBtn.innerHTML = oldText;
+        checkFontsStatus();
+    }
+}
+
+async function handleDeleteFonts() {
+    const confirmed = await modalConfirm(
+        'Delete downloaded font files from server? The app will switch back to using Google Fonts CDN (requires internet).',
+        'Delete offline fonts',
+        'Delete'
+    );
+    if (!confirmed) return;
+    try {
+        const res = await apiFetch('api/settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete_fonts' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            localStorage.setItem('offline_fonts_enabled', 'false');
+            if (fontsSummary) {
+                fontsSummary.className = 'admin-import-summary import-success';
+                fontsSummary.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + (data.message || 'Local fonts deleted.');
+            }
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            throw new Error(data.error || 'Failed to delete fonts');
+        }
+    } catch (e) {
+        if (fontsSummary) {
+            fontsSummary.className = 'admin-import-summary import-error';
+            fontsSummary.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> ' + (e.message || 'Failed to delete fonts.');
+        }
+    } finally {
+        checkFontsStatus();
+    }
+}
+
+downloadFontsBtn?.addEventListener('click', handleDownloadFonts);
+deleteFontsBtn?.addEventListener('click', handleDeleteFonts);
+
+const addFontForm = document.getElementById('addFontForm');
+addFontForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nameInput = document.getElementById('newFontNameInput');
+    const categorySelect = document.getElementById('newFontCategorySelect');
+    const addBtn = document.getElementById('addFontBtn');
+    if (!nameInput || !categorySelect || !addBtn) return;
+
+    const family = nameInput.value.trim();
+    const category = categorySelect.value;
+    if (!family) return;
+
+    addBtn.disabled = true;
+    const oldHtml = addBtn.innerHTML;
+    addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding…';
+
+    try {
+        const res = await apiFetch('api/settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add_font', family, category })
+        });
+        const data = await res.json();
+        if (data.success) {
+            localStorage.setItem('my_note_fonts', JSON.stringify(data.fonts));
+            localStorage.setItem('offline_fonts_enabled', 'false');
+            nameInput.value = '';
+            window.location.reload();
+        } else {
+            await modalAlert(data.error || 'Failed to add font', 'Error');
+        }
+    } catch(err) {
+        await modalAlert(err.message || 'Failed to add font', 'Error');
+    } finally {
+        addBtn.disabled = false;
+        addBtn.innerHTML = oldHtml;
+    }
+});
 
 closeUserBtn.onclick = () => {
     userView.classList.add('hidden');
@@ -6129,6 +6832,29 @@ async function resetUserPassword(id) {
         await modalAlert(data.error || 'Failed to reset password', 'Error');
     }
 }
+
+// Sync local fonts download status on startup
+async function syncFontsOnStartup() {
+    try {
+        const res = await apiFetch('api/settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'check_fonts' })
+        });
+        const data = await res.json();
+        if (data.fonts) {
+            localStorage.setItem('my_note_fonts', JSON.stringify(data.fonts));
+        }
+        if (data.downloaded) {
+            localStorage.setItem('offline_fonts_enabled', 'true');
+        } else {
+            localStorage.setItem('offline_fonts_enabled', 'false');
+        }
+    } catch (e) {
+        // Keep offline fonts enabled if we are offline and it was previously enabled
+    }
+}
+syncFontsOnStartup();
 
 // Expose for search result onclick
 window.openPage = openPage;

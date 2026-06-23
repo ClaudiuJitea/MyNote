@@ -7,10 +7,57 @@
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        (function() {
+            var defaultFonts = [
+                { id: 'inter', name: 'Inter (Default)', family: 'Inter', category: 'sans-serif' },
+                { id: 'roboto', name: 'Roboto', family: 'Roboto', category: 'sans-serif' },
+                { id: 'lora', name: 'Lora (Serif)', family: 'Lora', category: 'serif' },
+                { id: 'caveat', name: 'Caveat (Handwriting)', family: 'Caveat', category: 'cursive' },
+                { id: 'jetbrains-mono', name: 'JetBrains Mono', family: 'JetBrains Mono', category: 'monospace' }
+            ];
+            var activeFonts = defaultFonts;
+            try {
+                var stored = localStorage.getItem('my_note_fonts');
+                if (stored) {
+                    var parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        activeFonts = parsed;
+                    }
+                }
+            } catch(e) {}
+
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            if (localStorage.getItem('offline_fonts_enabled') === 'true') {
+                link.href = 'fonts/local_fonts.css';
+            } else {
+                var families = [];
+                for (var i = 0; i < activeFonts.length; i++) {
+                    var f = activeFonts[i];
+                    var name = f.family.replace(/ /g, '+');
+                    if (f.id === 'caveat') {
+                        families.push('family=' + name + ':wght@400..700');
+                    } else if (f.id === 'lora') {
+                        families.push('family=' + name + ':ital,wght@0,400..700;1,400..700');
+                    } else if (f.id === 'inter') {
+                        families.push('family=' + name + ':wght@400;500;600;700');
+                    } else if (f.id === 'jetbrains-mono') {
+                        families.push('family=' + name + ':ital,wght@0,100..800;1,100..800');
+                    } else if (f.id === 'roboto') {
+                        families.push('family=' + name + ':ital,wght@0,100..900;1,100..900');
+                    } else {
+                        families.push('family=' + name + ':ital,wght@0,300..700;1,300..700');
+                    }
+                }
+                link.href = 'https://fonts.googleapis.com/css2?' + families.join('&') + '&display=swap';
+            }
+            document.head.appendChild(link);
+        })();
+    </script>
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=16">
+    <link rel="stylesheet" href="style.css?v=18">
 </head>
 <body class="light">
 
@@ -339,6 +386,65 @@
                     <option value="replace">Replace all my notes</option>
                 </select>
                 <div id="userImportSummary" class="admin-import-summary hidden" aria-live="polite"></div>
+            </div>
+
+            <div class="admin-card">
+                <h3><i class="fa-solid fa-font"></i> Typography &amp; Offline Fonts</h3>
+                <p class="admin-card-desc">Add custom Google Fonts and download them to the local server so they work fully offline.</p>
+                
+                <div class="admin-fonts-status-group">
+                    <p class="fonts-status-label">Current Status: <span id="fontsStatusBadge" class="fonts-badge status-loading">Checking…</span></p>
+                </div>
+
+                <div class="fonts-manager-section">
+                    <h4 class="fonts-section-title">Installed Font Families</h4>
+                    <div id="fontsConfigList" class="fonts-config-list">
+                        <!-- Loaded dynamically in app.js -->
+                    </div>
+                </div>
+
+                <div class="fonts-manager-section font-add-box">
+                    <h4 class="fonts-section-title">Add Google Font</h4>
+                    <form id="addFontForm" class="add-font-form">
+                        <div class="add-font-fields">
+                            <div class="add-font-field">
+                                <label for="newFontNameInput" class="ai-field-label">Font Family Name</label>
+                                <input type="text" id="newFontNameInput" class="ai-field-input" placeholder="e.g. Montserrat, Playfair Display" required autocomplete="off">
+                            </div>
+                            <div class="add-font-field">
+                                <label for="newFontCategorySelect" class="ai-field-label">Category</label>
+                                <select id="newFontCategorySelect" class="backup-mode-select font-category-select">
+                                    <option value="sans-serif">Sans-Serif</option>
+                                    <option value="serif">Serif</option>
+                                    <option value="monospace">Monospace</option>
+                                    <option value="cursive">Handwriting</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="add-font-actions">
+                            <button type="submit" id="addFontBtn" class="btn btn-secondary">
+                                <i class="fa-solid fa-plus"></i> Add Font
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="fonts-manager-section offline-downloads-box">
+                    <h4 class="fonts-section-title">Offline Cache</h4>
+                    <p class="fonts-card-hint">Downloading cache will package all configured fonts to the server. Adding or removing a font will invalidate this cache, requiring a fresh download.</p>
+                    <div class="admin-fonts-actions">
+                        <button id="downloadFontsBtn" class="btn btn-secondary" type="button">
+                            <i class="fa-solid fa-cloud-arrow-down"></i>
+                            Download fonts to server
+                        </button>
+                        <button id="deleteFontsBtn" class="btn btn-secondary secondary-action-danger hidden" type="button">
+                            <i class="fa-solid fa-trash-can"></i>
+                            Delete offline fonts
+                        </button>
+                    </div>
+                </div>
+
+                <div id="fontsSummary" class="admin-import-summary hidden" aria-live="polite"></div>
             </div>
         </div>
     </div>
@@ -760,6 +866,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
-    <script src="app.js?v=51"></script>
+    <script src="app.js?v=53"></script>
 </body>
 </html>
