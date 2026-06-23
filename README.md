@@ -190,34 +190,34 @@ Click any image in the editor to activate the resize handles and toolbar:
 
 AI assistance features in MyNote are optional. Each user can configure their own personal key, or administrators can configure a system-wide fallback key. Without a key, the rest of the application remains fully functional.
 
-### 🔑 Step 1: Create an OpenRouter API Key
+### Step 1: Create an OpenRouter API Key
 1. Go to the [OpenRouter Keys Page](https://openrouter.ai/keys) and log in.
 2. Click **Create Key**, assign it a name (e.g. `MyNote`), and copy the generated key (it starts with `sk-or-v1-…`).
 3. *Note:* You can use OpenRouter with a funded balance, or choose free-tier models (marked with `:free`) that require no credit card or payments.
 
-### 📥 Step 2: Configure Your Key in MyNote
+### Step 2: Configure Your Key in MyNote
 1. Log in to your MyNote application instance.
 2. Click **Account** at the bottom-left of the sidebar to open user settings.
 3. Locate the **AI (OpenRouter)** card.
 4. Paste your API key into the **OpenRouter API key** input field.
 
-### 🤖 Step 3: Choose an AI Model
+### Step 3: Choose an AI Model
 *   **Recommended (Default):** `google/gemma-4-26b-a4b-it` — pre-configured for optimal balance between speed, reasoning, and note formatting.
 *   **Free Alternatives:** Type a free model ID (e.g. `google/gemma-4-26b-a4b-it:free`, `google/gemma-4-31b-it:free`, or `meta-llama/llama-3-8b-instruct:free`).
 *   **Custom Models:** You can type **any** model identifier hosted on OpenRouter (e.g. `anthropic/claude-3.5-sonnet`, `meta-llama/llama-3.1-70b-instruct`) in the Model input field. A datalist will provide auto-complete suggestions.
 
-### 🧪 Step 4: Test Connection & Save
+### Step 4: Test Connection & Save
 1. Click **Test connection**. The app will make a test request to OpenRouter's endpoint.
 2. If successful, you will see a green success message `Connection successful.` confirming the connection.
 3. Click **Save AI settings**. Keys are encrypted symmetrically on the server using AES-256-GCM and are never sent back to the browser in plain text after saving.
 
-### 👑 Administrator Fallback Key (System-wide Setup)
+### Administrator Fallback Key (System-wide Setup)
 Admins can set up a global fallback key so members don't need to generate their own:
 1. Log in as an administrator and click **Admin Panel** in the sidebar.
 2. Under the **AI System Fallback** card, enter the fallback OpenRouter key and model.
 3. If user accounts do not have a personal key saved, the application automatically falls back to this administrator key.
 
-### 🪄 Using AI Actions
+### Using AI Actions
 Select any text block in your note editor and open the AI palette:
 *   **Trigger Shortcut:** Press `Ctrl+Shift+A` or click the **AI** action button in the toolbar.
 *   **Writing Assistance:** Select from pre-configured actions like *Improve Clarity*, *Fix Grammar*, *Change Tone* (Professional, Casual, Confident, Friendly), *Shorten*, *Expand*, or *Summarize*.
