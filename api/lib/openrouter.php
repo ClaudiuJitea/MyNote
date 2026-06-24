@@ -224,6 +224,11 @@ function buildAiMessages(string $action, string $text, ?string $customPrompt = n
         }
     }
 
+    $allowRename = in_array($action, ['improve', 'expand', 'formal', 'casual', 'summarize', 'explain', 'continue', 'generate', 'study_plan', 'ask', 'custom'], true);
+    if ($allowRename) {
+        $system .= "\n\nCAPABILITY: You can rename/change the title of the current note if specifically requested by the user. To do this, prepend your response with exactly: RENAME_NOTE: New Note Title\nfollowed by a newline, and then continue with the note content.";
+    }
+
     return [
         ['role' => 'system', 'content' => $system],
         ['role' => 'user', 'content' => $userContent],

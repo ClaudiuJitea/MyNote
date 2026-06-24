@@ -1923,8 +1923,50 @@ async function createNoteWithAiContent(title, content) {
 }
 
 async function applyAiResultToEditor() {
-    const result = aiModalResultText.trim();
+    let result = aiModalResultText.trim();
     if (!result) return;
+
+    // Check if the AI wants to rename the note
+    const renamePrefix = 'RENAME_NOTE:';
+    let renameOccurred = false;
+    if (result.startsWith(renamePrefix)) {
+        const firstLineIndex = result.indexOf('\n');
+        let renameLine = '';
+        if (firstLineIndex !== -1) {
+            renameLine = result.substring(0, firstLineIndex).trim();
+            result = result.substring(firstLineIndex + 1).trim();
+        } else {
+            renameLine = result;
+            result = '';
+        }
+
+        const newTitle = renameLine.substring(renamePrefix.length).trim().replace(/^["']|["']$/g, '');
+        if (pageTitle && newTitle) {
+            pageTitle.value = newTitle;
+            scheduleSave();
+        }
+        renameOccurred = true;
+    }
+
+    if (renameOccurred) {
+        const remainingClean = result.trim();
+        if (remainingClean === '') {
+            return;
+        }
+        const wordCount = remainingClean.split(/\s+/).filter(Boolean).length;
+        const isConfirmation = wordCount < 15 && (
+            /^(i have|i've|done|sure|ok|successfully|changed|renamed|updated|title|here is the new|note renamed)/i.test(remainingClean) ||
+            /^(done|ok|yes|updated|success)\b/i.test(remainingClean) ||
+            /renamed?\s+(the\s+)?note/i.test(remainingClean) ||
+            /updated?\s+(the\s+)?title/i.test(remainingClean) ||
+            /changed?\s+(the\s+)?title/i.test(remainingClean) ||
+            /title\s+has\s+been\s+updated/i.test(remainingClean) ||
+            /note\s+has\s+been\s+renamed/i.test(remainingClean)
+        );
+        if (isConfirmation) {
+            return;
+        }
+    }
 
     const action = aiPaletteForm.action || 'improve';
     const ui = getAiActionUi(action);
@@ -6217,6 +6259,7 @@ function clearSearchAndReturnHome() {
     searchResults.innerHTML = '';
     clearSearchViewHighlights();
     updateSearchClearVisibility();
+    closeNotesPanel();
     hideEditor();
     searchInput.blur();
 }
