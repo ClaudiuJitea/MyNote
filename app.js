@@ -1748,15 +1748,121 @@ function openAiAssistModal(options = {}) {
     openAiPalette(options);
 }
 
-function insertAiTextAtEnd(text) {
-    const index = Math.max(0, quill.getLength() - 1);
-    const prefix = quill.getText(0, index).trim() ? '\n\n' : '';
-    quill.insertText(index, `${prefix}${text}`, 'user');
-    quill.setSelection(index + prefix.length + text.length, 0);
+function prepareContentForQuill(content) {
+    const trimmed = content.trim();
+    if (trimmed.startsWith('<') && (trimmed.endsWith('>') || trimmed.includes('</'))) {
+        return trimmed;
+    }
+    return convertMarkdownToHtml(trimmed);
 }
 
-function insertAiTextAtStart(text) {
-    quill.insertText(0, `${text}\n\n`, 'user');
+function convertMarkdownToHtml(markdown) {
+    if (!markdown) return '';
+
+    const lines = markdown.split(/\r?\n/);
+    let html = '';
+    let inList = false;
+    let listType = '';
+
+    const closeList = () => {
+        if (inList) {
+            html += `</${listType}>\n`;
+            inList = false;
+            listType = '';
+        }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+
+        if (line === '') {
+            closeList();
+            continue;
+        }
+
+        // Headers
+        const headerMatch = line.match(/^(#{1,6})\s+(.*)$/);
+        if (headerMatch) {
+            closeList();
+            const level = Math.min(6, headerMatch[1].length);
+            const content = parseInlineMarkdown(headerMatch[2]);
+            html += `<h${level}>${content}</h${level}>\n`;
+            continue;
+        }
+
+        // Unordered lists
+        const ulMatch = line.match(/^([-\*])\s+(.*)$/);
+        if (ulMatch) {
+            if (!inList || listType !== 'ul') {
+                closeList();
+                html += '<ul>\n';
+                inList = true;
+                listType = 'ul';
+            }
+            const content = parseInlineMarkdown(ulMatch[2]);
+            html += `<li>${content}</li>\n`;
+            continue;
+        }
+
+        // Ordered lists
+        const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+        if (olMatch) {
+            if (!inList || listType !== 'ol') {
+                closeList();
+                html += '<ol>\n';
+                inList = true;
+                listType = 'ol';
+            }
+            const content = parseInlineMarkdown(olMatch[2]);
+            html += `<li>${content}</li>\n`;
+            continue;
+        }
+
+        // Blockquotes
+        const quoteMatch = line.match(/^>\s*(.*)$/);
+        if (quoteMatch) {
+            closeList();
+            const content = parseInlineMarkdown(quoteMatch[1]);
+            html += `<blockquote>${content}</blockquote>\n`;
+            continue;
+        }
+
+        // Standard Paragraph
+        closeList();
+        const content = parseInlineMarkdown(line);
+        html += `<p>${content}</p>\n`;
+    }
+
+    closeList();
+    return html;
+}
+
+function parseInlineMarkdown(text) {
+    let escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    escaped = escaped.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
+    escaped = escaped.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
+    escaped = escaped.replace(/`(.*?)`/g, '<code>$1</code>');
+    escaped = escaped.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+    return escaped;
+}
+
+function insertAiHtmlAtEnd(html) {
+    const index = Math.max(0, quill.getLength() - 1);
+    if (quill.getText(0, index).trim() !== '') {
+        quill.clipboard.dangerouslyPasteHTML(index, '<p><br></p>' + html, 'user');
+    } else {
+        quill.clipboard.dangerouslyPasteHTML(index, html, 'user');
+    }
+    quill.setSelection(quill.getLength(), 0);
+}
+
+function insertAiHtmlAtStart(html) {
+    quill.clipboard.dangerouslyPasteHTML(0, html, 'user');
     quill.setSelection(0, 0);
 }
 
@@ -1788,10 +1894,11 @@ async function createNoteWithAiContent(title, content) {
         return false;
     }
 
+    const htmlContent = prepareContentForQuill(content);
     const res = await apiFetch('api/pages.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ section_id: sectionId, title, content: `<p>${escapeHtml(content).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>` })
+        body: JSON.stringify({ section_id: sectionId, title, content: htmlContent })
     });
     const data = await res.json();
     if (!data?.id) {
@@ -1845,16 +1952,18 @@ async function applyAiResultToEditor() {
         ? 'append'
         : (aiModalTarget.mode === 'selection' ? 'replace' : (aiPaletteForm.applyMode || ui.defaultApply || 'replace'));
 
+    const htmlContent = prepareContentForQuill(result);
+
     if (aiModalTarget.range && aiModalTarget.range.length > 0) {
         quill.deleteText(aiModalTarget.range.index, aiModalTarget.range.length, 'user');
-        quill.insertText(aiModalTarget.range.index, result, 'user');
-        quill.setSelection(aiModalTarget.range.index + result.length, 0);
+        quill.clipboard.dangerouslyPasteHTML(aiModalTarget.range.index, htmlContent, 'user');
     } else if (applyMode === 'append' || action === 'continue') {
-        insertAiTextAtEnd(result);
+        insertAiHtmlAtEnd(htmlContent);
     } else if (applyMode === 'prepend') {
-        insertAiTextAtStart(result);
+        insertAiHtmlAtStart(htmlContent);
     } else {
-        quill.setText(result, 'user');
+        quill.setText('', 'user');
+        quill.clipboard.dangerouslyPasteHTML(0, htmlContent, 'user');
         quill.setSelection(quill.getLength(), 0);
     }
 

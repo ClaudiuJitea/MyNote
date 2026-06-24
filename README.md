@@ -28,7 +28,7 @@ Light and dark themes with the same layout and features.
 
 ### AI assistant
 
-Command palette for writing help: improve clarity, fix grammar, shorten or expand text, change tone, continue writing, and more. Open with the AI button or `Ctrl+Shift+A`.
+Command palette for writing help: improve clarity, fix grammar, shorten or expand text, change tone, continue writing, and more. Structured AI output (headings, lists, emphasis) is converted from Markdown into rich text when inserted. Open with the AI button or `Ctrl+Shift+A`.
 
 ![MyNotes AI command palette with writing tools](img/AI.png)
 
@@ -65,6 +65,7 @@ User management, system-wide backup, and admin AI configuration.
 - **Themes** — Light and dark mode
 - **Multi-user** — Admin and member roles; admins manage users from the admin panel
 - **AI (optional)** — Connect your own [OpenRouter](https://openrouter.ai/) API key to translate, summarize, generate content, create flashcards, quizzes, study plans, and more
+- **Structured AI output** — AI responses that use Markdown (headings, lists, bold, links, blockquotes) are automatically converted to rich text in the editor instead of plain paragraphs
 - **Backup** — Export and import your data as a portable `.mynote.zip` archive
 - **Security** — Session-based auth, CSRF protection, login rate limiting, encrypted AI keys on the server
 
@@ -222,6 +223,29 @@ Select any text block in your note editor and open the AI palette:
 *   **Trigger Shortcut:** Press `Ctrl+Shift+A` or click the **AI** action button in the toolbar.
 *   **Writing Assistance:** Select from pre-configured actions like *Improve Clarity*, *Fix Grammar*, *Change Tone* (Professional, Casual, Confident, Friendly), *Shorten*, *Expand*, or *Summarize*.
 *   **Study Tools:** Instantly generate Flashcards, Quizzes, or structured Study Plans from your selected notes text.
+
+### Structured AI output (Markdown to rich text)
+
+Many AI actions are prompted to return structured Markdown so inserted content keeps headings, lists, and emphasis instead of a single plain-text block. When you apply an AI result to the editor, MyNote converts that Markdown into Quill rich text automatically.
+
+**Supported Markdown syntax:**
+
+| Syntax | Result in the editor |
+|--------|----------------------|
+| `#` through `######` at line start | Heading levels 1-6 |
+| `- item` or `* item` | Bulleted list |
+| `1. item` | Numbered list |
+| `**bold**` or `__bold__` | Bold |
+| `*italic*` or `_italic_` | Italic |
+| `` `code` `` | Inline code |
+| `[label](url)` | Link |
+| `> quote` | Blockquote |
+
+**Actions that commonly return structured output:** Expand, Outline, Explain, Generate, Brainstorm, Quiz, Memorize, Study Plan, Summarize Section/Notebook, Ask, and Continue Writing. Grammar, Improve, Translate, and similar rewrite actions preserve existing headings and list formatting where possible.
+
+**Apply modes:** Replace the selection, append to the end of the note, or prepend at the top. Append and prepend insert a blank paragraph before the new content when the note already has text.
+
+If the AI returns HTML instead of Markdown, it is inserted as-is without conversion.
 
 ## Sketch drawing
 
